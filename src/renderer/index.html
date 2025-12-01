@@ -497,6 +497,53 @@
           </div>
         </div>
 
+        <!-- Retargeting Options -->
+        <div class="box" style="margin-top: 1rem;">
+          <p class="label">Retargeting Options</p>
+          
+          <div class="field">
+            <label class="label">Source Bind Pose Mode</label>
+            <div class="control">
+              <div class="select is-fullwidth">
+                <select id="source-pose-mode">
+                  <option value="0" selected>Default (Use Actual Bind Pose)</option>
+                  <option value="1">Current (Use Current Pose)</option>
+                </select>
+              </div>
+            </div>
+            <p class="help">Choose which pose to use as bind pose for source skeleton</p>
+          </div>
+          
+          <div class="field">
+            <label class="label">Target Bind Pose Mode</label>
+            <div class="control">
+              <div class="select is-fullwidth">
+                <select id="target-pose-mode">
+                  <option value="0" selected>Default (Use Actual Bind Pose)</option>
+                  <option value="1">Current (Use Current Pose)</option>
+                </select>
+              </div>
+            </div>
+            <p class="help">Choose which pose to use as bind pose for target skeleton</p>
+          </div>
+          
+          <div class="field">
+            <label class="checkbox">
+              <input type="checkbox" id="apply-tpose" />
+              Apply T-Pose Normalization
+            </label>
+            <p class="help">Normalize both skeletons to T-pose before retargeting</p>
+          </div>
+          
+          <div class="field">
+            <label class="checkbox">
+              <input type="checkbox" id="embed-transforms" checked />
+              Embed World Transforms
+            </label>
+            <p class="help">Include parent object transforms (recommended)</p>
+          </div>
+        </div>
+
         <!-- Animation Selection -->
         <div class="field" style="margin-top: 1rem;">
           <label class="label">Select Animations to Retarget</label>

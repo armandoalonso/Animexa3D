@@ -949,11 +949,77 @@ export class UIManager {
       return;
     }
     
-    console.log('Retargeting animations:', {
+    // Read retargeting options from UI
+    const sourcePoseMode = parseInt(document.getElementById('source-pose-mode').value);
+    const targetPoseMode = parseInt(document.getElementById('target-pose-mode').value);
+    const applyTPose = document.getElementById('apply-tpose').checked;
+    const embedTransforms = document.getElementById('embed-transforms').checked;
+    
+    console.log('Retargeting with options:', {
       sourceAnimationCount: sourceModelData.animations.length,
       selectedIndices: selectedAnimations,
-      boneMapping: Object.keys(this.retargetManager.boneMapping).length + ' bones mapped'
+      boneMapping: Object.keys(this.retargetManager.boneMapping).length + ' bones mapped',
+      sourcePoseMode,
+      targetPoseMode,
+      applyTPose,
+      embedTransforms
     });
+    
+    // Apply T-pose normalization BEFORE initializing if requested
+    if (applyTPose) {
+      console.log('Applying T-pose normalization to bind poses...');
+      try {
+        const sourceSkeleton = this.retargetManager.getSourceSkeleton();
+        const targetSkeleton = this.retargetManager.getTargetSkeleton();
+        
+        if (sourceSkeleton) {
+          this.retargetManager.applyTPose(sourceSkeleton);
+          console.log('✓ Source skeleton normalized to T-pose');
+        } else {
+          console.warn('Could not get source skeleton for T-pose');
+        }
+        
+        if (targetSkeleton) {
+          this.retargetManager.applyTPose(targetSkeleton);
+          console.log('✓ Target skeleton normalized to T-pose');
+        } else {
+          console.warn('Could not get target skeleton for T-pose');
+        }
+      } catch (tposeError) {
+        console.error('T-pose normalization error:', tposeError);
+        this.showNotification(
+          'Warning: T-pose normalization failed, proceeding without it',
+          'warning'
+        );
+      }
+    }
+    
+    // Initialize retargeting with options
+    // If T-pose was applied, use CURRENT mode to capture the T-posed skeleton
+    try {
+      const options = {
+        srcPoseMode: applyTPose ? 1 : sourcePoseMode, // 1 = CURRENT if T-posed
+        trgPoseMode: applyTPose ? 1 : targetPoseMode, // 1 = CURRENT if T-posed
+        srcEmbedWorld: embedTransforms,
+        trgEmbedWorld: embedTransforms
+      };
+      
+      console.log('Initializing with pose modes:', {
+        source: applyTPose ? 'CURRENT (T-posed)' : (sourcePoseMode === 0 ? 'DEFAULT' : 'CURRENT'),
+        target: applyTPose ? 'CURRENT (T-posed)' : (targetPoseMode === 0 ? 'DEFAULT' : 'CURRENT')
+      });
+      
+      this.retargetManager.initializeRetargeting(
+        sourceModelData.skeleton,
+        this.modelLoader.getCurrentModelData().skeleton,
+        this.retargetManager.boneMapping,
+        options
+      );
+    } catch (error) {
+      console.error('Retargeting initialization error:', error);
+      this.showNotification('Failed to initialize retargeting: ' + error.message, 'error');
+      return;
+    }
     
     const animations = sourceModelData.animations;
     const retargetedClips = [];

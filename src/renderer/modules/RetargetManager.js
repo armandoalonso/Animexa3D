@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 
+// Bind pose modes for retargeting
+export const BindPoseModes = {
+  DEFAULT: 0,  // Use skeleton's actual bind pose
+  CURRENT: 1   // Use skeleton's current pose as bind pose
+};
+
 export class RetargetManager {
   constructor(sceneManager, modelLoader, animationManager) {
     this.sceneManager = sceneManager;
@@ -547,13 +553,17 @@ export class RetargetManager {
   }
   
   /**
-   * Deep clone skeleton with additional retargeting attributes
+   * Deep clone of the skeleton. New bones are generated. Skeleton's parent
+   * objects will not be linked to the cloned one
+   * Returned skeleton has new attributes:
+   *  - Always: .parentIndices, .transformsWorld, .transformsWorldInverses
+   *  - embedWorld == true:  .transformsWorldEmbedded
    * @param {THREE.Skeleton} skeleton
-   * @param {boolean} useCurrentPose - Use current pose instead of bind pose
+   * @param {number} poseMode - BindPoseModes enum value (DEFAULT or CURRENT)
    * @param {boolean} embedWorld - Include world transforms
    * @returns {THREE.Skeleton}
    */
-  cloneRawSkeleton(skeleton, useCurrentPose = false, embedWorld = false) {
+  cloneRawSkeleton(skeleton, poseMode = BindPoseModes.DEFAULT, embedWorld = false) {
     const bones = skeleton.bones;
     const resultBones = new Array(bones.length);
     const parentIndices = new Int16Array(bones.length);
@@ -564,7 +574,7 @@ export class RetargetManager {
       resultBones[i].parent = null;
     }
     
-    // Rebuild hierarchy
+    // Rebuild hierarchy and track parent indices
     for (let i = 0; i < bones.length; i++) {
       const parentIdx = this.findIndexOfBone(skeleton, bones[i].parent);
       if (parentIdx > -1) {
@@ -573,29 +583,34 @@ export class RetargetManager {
       parentIndices[i] = parentIdx;
     }
     
-    // Update world matrices
+    // Update world matrices (assume bone 0 is root)
     resultBones[0].updateWorldMatrix(false, true);
     
-    // Generate skeleton
+    // Generate skeleton based on pose mode
     let resultSkeleton;
-    if (useCurrentPose) {
-      // Use current pose as bind pose
-      resultSkeleton = new THREE.Skeleton(resultBones);
-    } else {
-      // Use actual bind pose
-      const boneInverses = new Array(skeleton.boneInverses.length);
-      for (let i = 0; i < boneInverses.length; i++) {
-        boneInverses[i] = skeleton.boneInverses[i].clone();
-      }
-      resultSkeleton = new THREE.Skeleton(resultBones, boneInverses);
-      resultSkeleton.pose();
+    switch (poseMode) {
+      case BindPoseModes.CURRENT:
+        // Use current pose as bind pose
+        resultSkeleton = new THREE.Skeleton(resultBones);
+        break;
+      case BindPoseModes.DEFAULT:
+      default:
+        // Use actual bind pose
+        const boneInverses = new Array(skeleton.boneInverses.length);
+        for (let i = 0; i < boneInverses.length; i++) {
+          boneInverses[i] = skeleton.boneInverses[i].clone();
+        }
+        resultSkeleton = new THREE.Skeleton(resultBones, boneInverses);
+        resultSkeleton.pose();
+        break;
     }
     
+    // Attach custom attributes
     resultSkeleton.parentIndices = parentIndices;
     
-    // Precompute transforms (world space)
-    const transforms = new Array(skeleton.bones.length);
-    const transformsInverses = new Array(skeleton.bones.length);
+    // Precompute world transforms (forward and inverse)
+    const transforms = new Array(bones.length);
+    const transformsInverses = new Array(bones.length);
     
     for (let i = 0; i < transforms.length; i++) {
       let t = this.newTransform();
@@ -611,19 +626,20 @@ export class RetargetManager {
     resultSkeleton.transformsWorldInverses = transformsInverses;
     
     // Embedded world transforms (for handling parent transforms)
-    if (embedWorld && skeleton.bones[0].parent) {
+    if (embedWorld && bones[0].parent) {
       const embedded = {
         forward: this.newTransform(),
         inverse: this.newTransform()
       };
       
-      skeleton.bones[0].parent.matrixWorld.decompose(
+      bones[0].parent.updateWorldMatrix(true, false);
+      bones[0].parent.matrixWorld.decompose(
         embedded.forward.p,
         embedded.forward.q,
         embedded.forward.s
       );
       
-      skeleton.bones[0].parent.matrixWorld.clone().invert().decompose(
+      bones[0].parent.matrixWorld.clone().invert().decompose(
         embedded.inverse.p,
         embedded.inverse.q,
         embedded.inverse.s
@@ -713,8 +729,11 @@ export class RetargetManager {
   
   /**
    * Precompute retargeting quaternions for efficiency
-   * Based on: trgLocal = invBindTrgWorldParent * bindSrcWorldParent * srcLocal * invBindSrcWorld * bindTrgWorld
-   * Split as: left = invBindTrgWorldParent * bindSrcWorldParent, right = invBindSrcWorld * bindTrgWorld
+   * Full formula: trgLocal = invBindTrgWorldParent * invTrgEmbedded * srcEmbedded * 
+   *                         bindSrcWorldParent * srcLocal * invBindSrcWorld * 
+   *                         invSrcEmbedded * trgEmbedded * bindTrgWorld
+   * Split as: left = invBindTrgWorldParent * invTrgEmbedded * srcEmbedded * bindSrcWorldParent
+   *          right = invBindSrcWorld * invSrcEmbedded * trgEmbedded * bindTrgWorld
    * @returns {Object} - { left: Array, right: Array }
    */
   precomputeRetargetingQuats() {
@@ -725,12 +744,14 @@ export class RetargetManager {
       const trgIndex = this.boneMapIndices.idxMap[srcIndex];
       
       if (trgIndex < 0) {
+        // Bone not mapped, cannot precompute
         left[srcIndex] = null;
         right[srcIndex] = null;
         continue;
       }
       
-      // Compute LEFT side: invBindTrgWorldParent * bindSrcWorldParent
+      // ==== COMPUTE LEFT SIDE ====
+      // left = invBindTrgWorldParent * invTrgEmbedded * srcEmbedded * bindSrcWorldParent
       let leftQuat = new THREE.Quaternion(0, 0, 0, 1);
       
       // Start with bindSrcWorldParent
@@ -739,10 +760,12 @@ export class RetargetManager {
         leftQuat.copy(this.srcBindPose.transformsWorld[parentIdx].q);
       }
       
-      // Apply embedded transforms if present
+      // Apply srcEmbedded (if exists)
       if (this.srcBindPose.transformsWorldEmbedded) {
         leftQuat.premultiply(this.srcBindPose.transformsWorldEmbedded.forward.q);
       }
+      
+      // Apply invTrgEmbedded (if exists)
       if (this.trgBindPose.transformsWorldEmbedded) {
         leftQuat.premultiply(this.trgBindPose.transformsWorldEmbedded.inverse.q);
       }
@@ -755,19 +778,25 @@ export class RetargetManager {
       
       left[srcIndex] = leftQuat;
       
-      // Compute RIGHT side: invBindSrcWorld * bindTrgWorld
+      // ==== COMPUTE RIGHT SIDE ====
+      // right = invBindSrcWorld * invSrcEmbedded * trgEmbedded * bindTrgWorld
       let rightQuat = new THREE.Quaternion(0, 0, 0, 1);
-      rightQuat.copy(this.trgBindPose.transformsWorld[trgIndex].q); // bindTrgWorld
       
-      // Apply embedded transforms if present
+      // Start with bindTrgWorld
+      rightQuat.copy(this.trgBindPose.transformsWorld[trgIndex].q);
+      
+      // Apply trgEmbedded (if exists)
       if (this.trgBindPose.transformsWorldEmbedded) {
         rightQuat.premultiply(this.trgBindPose.transformsWorldEmbedded.forward.q);
       }
+      
+      // Apply invSrcEmbedded (if exists)
       if (this.srcBindPose.transformsWorldEmbedded) {
         rightQuat.premultiply(this.srcBindPose.transformsWorldEmbedded.inverse.q);
       }
       
-      rightQuat.premultiply(this.srcBindPose.transformsWorldInverses[srcIndex].q); // invBindSrcWorld
+      // Apply invBindSrcWorld
+      rightQuat.premultiply(this.srcBindPose.transformsWorldInverses[srcIndex].q);
       
       right[srcIndex] = rightQuat;
     }
@@ -797,8 +826,13 @@ export class RetargetManager {
   
   /**
    * Initialize retargeting data structures
+   * @param {Object} options - Retargeting options
+   * @param {number} options.srcPoseMode - Source bind pose mode (DEFAULT or CURRENT)
+   * @param {number} options.trgPoseMode - Target bind pose mode (DEFAULT or CURRENT)
+   * @param {boolean} options.srcEmbedWorld - Embed source world transforms
+   * @param {boolean} options.trgEmbedWorld - Embed target world transforms
    */
-  initializeRetargeting() {
+  initializeRetargeting(options = {}) {
     const srcSkeleton = this.getSourceSkeleton();
     const trgSkeleton = this.getTargetSkeleton();
     
@@ -806,22 +840,35 @@ export class RetargetManager {
       throw new Error('Source or target skeleton not found');
     }
     
+    // Extract options with defaults
+    const {
+      srcPoseMode = BindPoseModes.DEFAULT,
+      trgPoseMode = BindPoseModes.DEFAULT,
+      srcEmbedWorld = true,
+      trgEmbedWorld = true
+    } = options;
+    
     console.log('Initializing retargeting...');
     console.log('  Source skeleton:', srcSkeleton.bones.length, 'bones');
     console.log('  Target skeleton:', trgSkeleton.bones.length, 'bones');
+    console.log('  Pose modes:', {
+      source: srcPoseMode === BindPoseModes.CURRENT ? 'CURRENT' : 'DEFAULT',
+      target: trgPoseMode === BindPoseModes.CURRENT ? 'CURRENT' : 'DEFAULT'
+    });
+    console.log('  Embed world:', { source: srcEmbedWorld, target: trgEmbedWorld });
     
     // Compute bone mapping indices
     this.boneMapIndices = this.computeBoneMapIndices();
     const mappedCount = this.boneMapIndices.idxMap.filter(i => i >= 0).length;
     console.log('  Mapped bones:', mappedCount);
     
-    // Clone skeletons for bind pose
-    this.srcBindPose = this.cloneRawSkeleton(srcSkeleton, false, true);
-    this.trgBindPose = this.cloneRawSkeleton(trgSkeleton, false, true);
+    // Clone skeletons for bind pose with options
+    this.srcBindPose = this.cloneRawSkeleton(srcSkeleton, srcPoseMode, srcEmbedWorld);
+    this.trgBindPose = this.cloneRawSkeleton(trgSkeleton, trgPoseMode, trgEmbedWorld);
     
     console.log('  Bind poses cloned');
-    console.log('  Source has embedded transforms:', !!this.srcBindPose.transformsWorldEmbedded);
-    console.log('  Target has embedded transforms:', !!this.trgBindPose.transformsWorldEmbedded);
+    console.log('  Source embedded transforms:', !!this.srcBindPose.transformsWorldEmbedded);
+    console.log('  Target embedded transforms:', !!this.trgBindPose.transformsWorldEmbedded);
     
     // Precompute quaternions for efficient retargeting
     this.precomputedQuats = this.precomputeRetargetingQuats();
@@ -830,8 +877,8 @@ export class RetargetManager {
     // Compute proportion ratio for position scaling
     this.proportionRatio = this.computeProportionRatio();
     
-    console.log('Retargeting initialized:', {
-      proportionRatio: this.proportionRatio,
+    console.log('Retargeting initialized successfully:', {
+      proportionRatio: this.proportionRatio.toFixed(3),
       mappedBones: mappedCount
     });
   }
@@ -922,9 +969,32 @@ export class RetargetManager {
   retargetQuaternionTrack(srcTrack) {
     const boneName = srcTrack.name.slice(0, srcTrack.name.length - 11); // Remove ".quaternion"
     const srcSkeleton = this.getSourceSkeleton();
+    const trgSkeleton = this.getTargetSkeleton();
     const boneIndex = this.findIndexOfBoneByName(srcSkeleton, boneName);
     
-    if (boneIndex < 0 || this.boneMapIndices.idxMap[boneIndex] < 0) {
+    if (boneIndex < 0) {
+      return null;
+    }
+    
+    // Check if bone is mapped, or if target has same bone name (fallback)
+    let targetBoneName = null;
+    if (this.boneMapIndices.idxMap[boneIndex] >= 0) {
+      // Use explicit mapping
+      targetBoneName = this.boneMapIndices.nameMap[boneName];
+    } else {
+      // Fallback: check if target skeleton has same bone name
+      const targetBoneIndex = this.findIndexOfBoneByName(trgSkeleton, boneName);
+      if (targetBoneIndex >= 0) {
+        targetBoneName = boneName;
+        console.log(`Using fallback mapping for unmapped bone: ${boneName}`);
+      } else {
+        // Bone not mapped and no matching name found
+        console.warn(`Skipping unmapped bone: ${boneName} (not found in target)`);
+        return null;
+      }
+    }
+    
+    if (!targetBoneName) {
       return null;
     }
     
@@ -941,7 +1011,6 @@ export class RetargetManager {
       trgValues[i + 3] = quat.w;
     }
     
-    const targetBoneName = this.boneMapIndices.nameMap[boneName];
     return new THREE.QuaternionKeyframeTrack(
       targetBoneName + '.quaternion',
       srcTrack.times.slice(),
@@ -957,9 +1026,25 @@ export class RetargetManager {
   retargetPositionTrack(srcTrack) {
     const boneName = srcTrack.name.slice(0, srcTrack.name.length - 9); // Remove ".position"
     const srcSkeleton = this.getSourceSkeleton();
+    const trgSkeleton = this.getTargetSkeleton();
     const boneIndex = this.findIndexOfBoneByName(srcSkeleton, boneName);
     
-    if (boneIndex < 0 || this.boneMapIndices.idxMap[boneIndex] < 0) {
+    if (boneIndex < 0) {
+      return null;
+    }
+    
+    // Check if bone is mapped, or if target has same bone name (fallback)
+    let targetBoneName = null;
+    if (this.boneMapIndices.idxMap[boneIndex] >= 0) {
+      targetBoneName = this.boneMapIndices.nameMap[boneName];
+    } else {
+      const targetBoneIndex = this.findIndexOfBoneByName(trgSkeleton, boneName);
+      if (targetBoneIndex >= 0) {
+        targetBoneName = boneName;
+      }
+    }
+    
+    if (!targetBoneName) {
       return null;
     }
     
@@ -1002,9 +1087,69 @@ export class RetargetManager {
       trgValues.set(srcValues);
     }
     
-    const targetBoneName = this.boneMapIndices.nameMap[boneName];
     return new THREE.VectorKeyframeTrack(
       targetBoneName + '.position',
+      srcTrack.times.slice(),
+      trgValues
+    );
+  }
+  
+  /**
+   * Retarget scale track
+   * @param {THREE.VectorKeyframeTrack} srcTrack
+   * @returns {THREE.VectorKeyframeTrack|null}
+   */
+  retargetScaleTrack(srcTrack) {
+    const boneName = srcTrack.name.slice(0, srcTrack.name.length - 6); // Remove ".scale"
+    const srcSkeleton = this.getSourceSkeleton();
+    const trgSkeleton = this.getTargetSkeleton();
+    const boneIndex = this.findIndexOfBoneByName(srcSkeleton, boneName);
+    
+    if (boneIndex < 0) {
+      return null;
+    }
+    
+    // Check if bone is mapped, or if target has same bone name (fallback)
+    let targetBoneName = null;
+    let trgIndex = -1;
+    if (this.boneMapIndices.idxMap[boneIndex] >= 0) {
+      trgIndex = this.boneMapIndices.idxMap[boneIndex];
+      targetBoneName = this.boneMapIndices.nameMap[boneName];
+    } else {
+      const targetBoneIndex = this.findIndexOfBoneByName(trgSkeleton, boneName);
+      if (targetBoneIndex >= 0) {
+        trgIndex = targetBoneIndex;
+        targetBoneName = boneName;
+      }
+    }
+    
+    if (!targetBoneName || trgIndex < 0) {
+      return null;
+    }
+    
+    // Get bind pose scales
+    const srcScale = this.srcBindPose.bones[boneIndex].scale;
+    const trgScale = this.trgBindPose.bones[trgIndex].scale;
+    
+    // Compute scale ratio
+    const scaleRatio = new THREE.Vector3(
+      trgScale.x / srcScale.x,
+      trgScale.y / srcScale.y,
+      trgScale.z / srcScale.z
+    );
+    
+    const srcValues = srcTrack.values;
+    const trgValues = new Float32Array(srcValues.length);
+    
+    // Apply scale ratio to each keyframe
+    for (let i = 0; i < srcValues.length; i += 3) {
+      trgValues[i] = srcValues[i] * scaleRatio.x;
+      trgValues[i + 1] = srcValues[i + 1] * scaleRatio.y;
+      trgValues[i + 2] = srcValues[i + 2] * scaleRatio.z;
+    }
+    
+    return new THREE.VectorKeyframeTrack(
+      targetBoneName + '.scale',
       srcTrack.times.slice(),
       trgValues
     );
@@ -1022,9 +1167,15 @@ export class RetargetManager {
     }
     
     if (Object.keys(this.boneMapping).length === 0) {
+      console.error('❌ No bone mappings found!');
+      console.log('Source model:', this.sourceModel);
+      console.log('Target model:', this.targetModel);
       window.uiManager.showNotification('No bone mappings defined. Use auto-map or manual mapping.', 'error');
       return null;
     }
+    
+    console.log('🎯 Starting retargeting with', Object.keys(this.boneMapping).length, 'bone mappings');
+    console.log('Bone mappings:', this.boneMapping);
     
     try {
       // Initialize retargeting if not done
@@ -1036,6 +1187,10 @@ export class RetargetManager {
       const trgTracks = [];
       const srcTracks = sourceClip.tracks;
       
+      console.log('📊 Processing', srcTracks.length, 'animation tracks');
+      let skippedCount = 0;
+      let retargetedCount = 0;
+      
       for (let i = 0; i < srcTracks.length; i++) {
         const track = srcTracks[i];
         let newTrack = null;
@@ -1046,16 +1201,24 @@ export class RetargetManager {
         } else if (track.name.endsWith('.quaternion')) {
           newTrack = this.retargetQuaternionTrack(track);
         } else if (track.name.endsWith('.scale')) {
-          // For now, skip scale tracks (could be added later)
-          continue;
+          newTrack = this.retargetScaleTrack(track);
         }
         
         if (newTrack) {
           trgTracks.push(newTrack);
+          retargetedCount++;
+          if (retargetedCount <= 50) { // Log first 50 to see all mapped bones
+            console.log(`  ✓ ${track.name.split('.')[0]} → ${newTrack.name}`);
+          }
+        } else {
+          skippedCount++;
         }
       }
       
+      console.log(`✅ Retargeted ${retargetedCount} tracks, ❌ Skipped ${skippedCount} tracks`);
+      
       if (trgTracks.length === 0) {
+        console.error('❌ No tracks were successfully retargeted!');
         window.uiManager.showNotification('No tracks were retargeted', 'warning');
         return null;
       }
@@ -1113,33 +1276,39 @@ export class RetargetManager {
   /**
    * Extend bone chain to follow parent direction (for T-pose)
    * @param {THREE.Skeleton} skeleton
-   * @param {string} originName - Origin bone name
-   * @param {string} endName - End bone name (optional)
+   * @param {THREE.Bone|string} origin - Origin bone or name
+   * @param {THREE.Bone|string} end - End bone or name (optional)
    */
-  extendChain(skeleton, originName, endName = null) {
-    const base = skeleton.getBoneByName ? 
-      skeleton.getBoneByName(originName) : 
-      skeleton.bones.find(b => b.name === originName);
+  extendChain(skeleton, origin, end = null) {
+    // Get bone references
+    const base = typeof origin === 'string' ? 
+      skeleton.bones.find(b => b.name === origin) : origin;
     
-    if (!base) return;
-    
-    let previous = null;
-    let end = base;
-    
-    if (!endName) {
-      // Find the last bone in the chain
-      while (end.children.length) {
-        end = end.children[0];
-      }
-      previous = end;
-    } else {
-      previous = skeleton.getBoneByName ? 
-        skeleton.getBoneByName(endName) : 
-        skeleton.bones.find(b => b.name === endName);
+    if (!base) {
+      console.warn('extendChain: origin bone not found:', origin);
+      return;
     }
     
-    if (!previous) return;
+    // Find end bone
+    let previous = null;
+    if (!end) {
+      // Find last bone in chain
+      let current = base;
+      while (current.children.length > 0) {
+        current = current.children[0];
+      }
+      previous = current;
+    } else {
+      previous = typeof end === 'string' ?
+        skeleton.bones.find(b => b.name === end) : end;
+    }
     
+    if (!previous) {
+      console.warn('extendChain: end bone not found:', end);
+      return;
+    }
+    
+    // Walk up the chain and extend
     let current = previous.parent;
     let next = current ? current.parent : null;
     
@@ -1148,34 +1317,40 @@ export class RetargetManager {
       const currPos = current.getWorldPosition(new THREE.Vector3());
       const nextPos = next.getWorldPosition(new THREE.Vector3());
       
-      // Direction from next to current
+      // Desired direction: from next to current
       const desired_dir = new THREE.Vector3();
       desired_dir.subVectors(currPos, nextPos).normalize();
       
-      // Direction from current to previous
+      // Current direction: from current to previous
       const current_dir = new THREE.Vector3();
       current_dir.subVectors(prevPos, currPos).normalize();
       
-      // Compute rotation to align current-to-previous with next-to-current
+      // Compute rotation angle
       const angle = current_dir.angleTo(desired_dir);
       
       if (Math.abs(angle) > 0.001) {
+        // Compute rotation axis
         const axis = new THREE.Vector3();
         axis.crossVectors(current_dir, desired_dir).normalize();
         
+        // Create rotation quaternion
         const rot = new THREE.Quaternion().setFromAxisAngle(axis, angle);
         
+        // Get current world rotation
         let currRot = current.getWorldQuaternion(new THREE.Quaternion());
         currRot = rot.multiply(currRot);
         
+        // Convert to local space
         const nextRot = next.getWorldQuaternion(new THREE.Quaternion());
         const localRot = nextRot.invert().multiply(currRot);
         
+        // Apply rotation
         current.quaternion.copy(localRot);
         current.updateMatrix();
         current.updateMatrixWorld(false, true);
       }
       
+      // Move up the chain
       previous = current;
       current = next;
       next = next.parent;
@@ -1185,53 +1360,67 @@ export class RetargetManager {
   /**
    * Align bone direction to a specific axis
    * @param {THREE.Skeleton} skeleton
-   * @param {string} originName - Origin bone name
-   * @param {string} endName - End bone name (optional)
+   * @param {string|THREE.Bone} origin - Origin bone or name
+   * @param {string|THREE.Bone} end - End bone or name (optional)
    * @param {THREE.Vector3} axis - Target axis
    */
-  alignBoneToAxis(skeleton, originName, endName, axis) {
-    const oBone = skeleton.getBoneByName ? 
-      skeleton.getBoneByName(originName) : 
-      skeleton.bones.find(b => b.name === originName);
+  alignBoneToAxis(skeleton, origin, end, axis) {
+    // Get origin bone
+    const oBone = typeof origin === 'string' ?
+      skeleton.bones.find(b => b.name === origin) : origin;
     
-    if (!oBone) return;
+    if (!oBone) {
+      console.warn('alignBoneToAxis: origin bone not found:', origin);
+      return;
+    }
     
     oBone.updateMatrixWorld(true, true);
     
+    // Get end bone
     let eBone = null;
-    if (endName) {
-      eBone = skeleton.getBoneByName ? 
-        skeleton.getBoneByName(endName) : 
-        skeleton.bones.find(b => b.name === endName);
+    if (end) {
+      eBone = typeof end === 'string' ?
+        skeleton.bones.find(b => b.name === end) : end;
     } else if (oBone.children.length > 0) {
       eBone = oBone.children[0];
     }
     
-    if (!eBone) return;
+    if (!eBone) {
+      console.warn('alignBoneToAxis: end bone not found:', end);
+      return;
+    }
     
+    // Get world positions
     const oPos = oBone.getWorldPosition(new THREE.Vector3());
     const ePos = eBone.getWorldPosition(new THREE.Vector3());
     
+    // Compute current direction
     const dir = new THREE.Vector3();
     dir.subVectors(ePos, oPos).normalize();
     
+    // Compute rotation angle
     const angle = dir.angleTo(axis);
     
     if (Math.abs(angle) > 0.001) {
+      // Compute rotation axis
       const new_axis = new THREE.Vector3();
       new_axis.crossVectors(dir, axis).normalize();
       
+      // Create rotation quaternion
       const rot = new THREE.Quaternion().setFromAxisAngle(new_axis, angle);
       
+      // Get current world rotation
       let oRot = oBone.getWorldQuaternion(new THREE.Quaternion());
       oRot = rot.multiply(oRot);
       
+      // Convert to local space
       let oLocalRot = oRot;
       if (oBone.parent) {
         const oParentRot = oBone.parent.getWorldQuaternion(new THREE.Quaternion());
         oLocalRot = oParentRot.invert().multiply(oRot);
       }
       
+      // Apply rotation
       oBone.quaternion.copy(oLocalRot);
       oBone.updateMatrix();
       oBone.updateMatrixWorld(false, true);
@@ -1239,9 +1428,51 @@ export class RetargetManager {
   }
   
   /**
+   * Rotate bone to look at a specific axis using a plane defined by two vectors
+   * @param {THREE.Bone} bone - Bone to rotate
+   * @param {THREE.Vector3} dir_a - First direction vector
+   * @param {THREE.Vector3} dir_b - Second direction vector
+   * @param {THREE.Vector3} axis - Target axis
+   */
+  lookBoneAtAxis(bone, dir_a, dir_b, axis) {
+    // Compute normal of the plane (current looking direction)
+    const rot_axis = new THREE.Vector3();
+    rot_axis.crossVectors(dir_a, dir_b).normalize();
+    
+    // Compute angle to desired axis
+    const angle = rot_axis.angleTo(axis);
+    
+    if (Math.abs(angle) > 0.001) {
+      // Compute rotation axis
+      const new_axis = new THREE.Vector3();
+      new_axis.crossVectors(rot_axis, axis).normalize();
+      
+      // Create rotation quaternion
+      const rot = new THREE.Quaternion().setFromAxisAngle(new_axis, angle);
+      
+      // Get current world rotation
+      let global_rot = bone.getWorldQuaternion(new THREE.Quaternion());
+      global_rot = rot.multiply(global_rot);
+      
+      // Convert to local space
+      let local_rot = global_rot;
+      if (bone.parent) {
+        const parent_rot = bone.parent.getWorldQuaternion(new THREE.Quaternion());
+        local_rot = parent_rot.invert().multiply(global_rot);
+      }
+      
+      // Apply rotation
+      bone.quaternion.copy(local_rot);
+      bone.updateMatrix();
+      bone.updateMatrixWorld(false, true);
+    }
+  }
+  
+  /**
    * Apply T-Pose to skeleton (useful for normalizing bind poses)
    * @param {THREE.Skeleton} skeleton
-   * @param {Object} boneMap - Bone name mapping
+   * @param {Object} boneMap - Bone name mapping (optional)
+   * @returns {Object} - { skeleton, map }
    */
   applyTPose(skeleton, boneMap = null) {
     if (!boneMap) {
@@ -1249,50 +1480,82 @@ export class RetargetManager {
       boneMap = this.detectTPoseBones(skeleton);
     }
     
+    console.log('Applying T-Pose with bone map:', boneMap);
+    
+    // Define standard axes
     const x_axis = new THREE.Vector3(1, 0, 0);
     const y_axis = new THREE.Vector3(0, 1, 0);
     const z_axis = new THREE.Vector3(0, 0, 1);
+    const neg_x_axis = new THREE.Vector3(-1, 0, 0);
+    const neg_y_axis = new THREE.Vector3(0, -1, 0);
     
-    // Extend chains
+    // Extend spine chain
     if (boneMap.Hips && boneMap.Spine) {
       this.extendChain(skeleton, boneMap.Hips, boneMap.Spine);
     }
     
-    // Extend limbs
+    // Extend limb chains
     const limbs = [
-      ['LeftUpLeg', 'LeftFoot'],
-      ['RightUpLeg', 'RightFoot'],
-      ['LeftArm', 'LeftHand'],
-      ['RightArm', 'RightHand']
+      [boneMap.LeftUpLeg, boneMap.LeftFoot],
+      [boneMap.RightUpLeg, boneMap.RightFoot],
+      [boneMap.LeftArm, boneMap.LeftHand],
+      [boneMap.RightArm, boneMap.RightHand]
     ];
     
     for (const [start, end] of limbs) {
-      if (boneMap[start] && boneMap[end]) {
-        this.extendChain(skeleton, boneMap[start], boneMap[end]);
+      if (start && end) {
+        this.extendChain(skeleton, start, end);
       }
     }
     
-    // Align arms to X axis (T-pose)
-    if (boneMap.LeftArm && boneMap.LeftHand) {
-      this.alignBoneToAxis(skeleton, boneMap.LeftArm, boneMap.LeftHand, 
-        new THREE.Vector3(-1, 0, 0)); // Left arm along -X
-    }
-    if (boneMap.RightArm && boneMap.RightHand) {
-      this.alignBoneToAxis(skeleton, boneMap.RightArm, boneMap.RightHand, 
-        new THREE.Vector3(1, 0, 0)); // Right arm along +X
+    // Align spine to Y axis
+    if (boneMap.Hips && boneMap.Spine) {
+      this.alignBoneToAxis(skeleton, boneMap.Hips, boneMap.Spine, y_axis);
     }
     
     // Align legs down Y axis
     if (boneMap.LeftUpLeg && boneMap.LeftFoot) {
-      this.alignBoneToAxis(skeleton, boneMap.LeftUpLeg, boneMap.LeftFoot, 
-        new THREE.Vector3(0, -1, 0)); // Left leg down
+      this.alignBoneToAxis(skeleton, boneMap.LeftUpLeg, boneMap.LeftFoot, neg_y_axis);
     }
     if (boneMap.RightUpLeg && boneMap.RightFoot) {
-      this.alignBoneToAxis(skeleton, boneMap.RightUpLeg, boneMap.RightFoot, 
-        new THREE.Vector3(0, -1, 0)); // Right leg down
+      this.alignBoneToAxis(skeleton, boneMap.RightUpLeg, boneMap.RightFoot, neg_y_axis);
     }
     
-    console.log('Applied T-Pose to skeleton');
+    // Align arms to X axis (T-pose characteristic)
+    // Left arm points to character's left (+X in world space)
+    // Right arm points to character's right (-X in world space)
+    if (boneMap.LeftArm && boneMap.LeftHand) {
+      console.log('Aligning left arm to +X axis');
+      this.alignBoneToAxis(skeleton, boneMap.LeftArm, boneMap.LeftHand, x_axis);
+    }
+    if (boneMap.RightArm && boneMap.RightHand) {
+      console.log('Aligning right arm to -X axis');
+      this.alignBoneToAxis(skeleton, boneMap.RightArm, boneMap.RightHand, neg_x_axis);
+    }
+    
+    // Optional: Align character to face Z axis
+    if (boneMap.RightArm && boneMap.LeftArm && boneMap.Spine) {
+      const rightArmBone = skeleton.bones.find(b => b.name === boneMap.RightArm);
+      const leftArmBone = skeleton.bones.find(b => b.name === boneMap.LeftArm);
+      const spineBone = skeleton.bones.find(b => b.name === boneMap.Spine);
+      
+      if (rightArmBone && leftArmBone && spineBone) {
+        const rArmPos = rightArmBone.getWorldPosition(new THREE.Vector3());
+        const lArmPos = leftArmBone.getWorldPosition(new THREE.Vector3());
+        
+        const arms_dir = new THREE.Vector3();
+        arms_dir.subVectors(lArmPos, rArmPos).normalize();
+        
+        this.lookBoneAtAxis(skeleton.bones[0], arms_dir, y_axis, z_axis);
+      }
+    }
+    
+    // Update skeleton
+    skeleton.bones[0].updateMatrixWorld(true, true);
+    
+    console.log('T-Pose applied successfully');
+    
+    return { skeleton, map: boneMap };
   }
   
   /**
@@ -1302,6 +1565,12 @@ export class RetargetManager {
    */
   detectTPoseBones(skeleton) {
     const boneMap = {};
+    
+    // Validate skeleton input
+    if (!skeleton || !skeleton.bones) {
+      console.error('Invalid skeleton passed to detectTPoseBones:', skeleton);
+      throw new Error('Invalid skeleton: missing bones array');
+    }
     
     const patterns = {
       'Hips': ['hips', 'pelvis'],
