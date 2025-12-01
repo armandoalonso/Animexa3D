@@ -189,6 +189,9 @@ html, body {
   padding: 1rem;
   border-bottom: 1px solid #e0e6ed;
   background: #f8f9fa;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .sidebar-header .title {
@@ -980,6 +983,135 @@ html, body {
 .mapping-list-item .mapping-details {
   font-size: 0.8rem;
   color: #6c757d;
+}
+
+/* Animation Selection List for Add Animation Modal */
+.animation-selection-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e0e6ed;
+  border-radius: 4px;
+  padding: 0.75rem;
+  background: #ffffff;
+}
+
+.animation-selection-list .field {
+  margin-bottom: 0.5rem;
+}
+
+.animation-selection-list .field:last-child {
+  margin-bottom: 0;
+}
+
+.animation-item-selectable {
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid #e0e6ed;
+  border-radius: 4px;
+  background: #f8f9fa;
+}
+
+.animation-item-selectable:last-child {
+  margin-bottom: 0;
+}
+
+.animation-item-selectable .field {
+  margin-bottom: 0.5rem;
+}
+
+.animation-item-selectable .field:last-child {
+  margin-bottom: 0;
+}
+
+.animation-selection-list .checkbox {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.animation-selection-list .checkbox:hover {
+  background: #f8f9fa;
+}
+
+.animation-selection-list .checkbox input[type="checkbox"] {
+  margin-right: 0.5rem;
+  cursor: pointer;
+}
+
+.animation-selection-list .has-text-grey {
+  color: #6c757d;
+  font-size: 0.875rem;
+}
+
+.animation-rename-input {
+  width: 100%;
+  font-size: 0.875rem;
+}
+
+/* Inline Retargeting Styles (for Add Animation Modal) */
+.bone-tree-container-small {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #e0e6ed;
+  border-radius: 4px;
+  padding: 0.5rem;
+  background: #ffffff;
+  font-size: 0.8rem;
+}
+
+.bone-tree-simple {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bone-item-inline {
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+}
+
+.bone-item-inline:hover {
+  background: #f8f9fa;
+}
+
+.bone-item-inline.selected {
+  background: #3298dc;
+  color: #ffffff;
+}
+
+.bone-item-inline.bone-mapped {
+  background: #d4edda;
+  border-left: 3px solid #28a745;
+}
+
+.bone-item-inline.bone-mapped.selected {
+  background: #28a745;
+  color: #ffffff;
+}
+
+.mapping-item-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0.5rem;
+  background: #f8f9fa;
+  border: 1px solid #e0e6ed;
+  border-radius: 4px;
+  margin-bottom: 0.25rem;
+}
+
+.mapping-item-inline button {
+  padding: 0.1rem 0.3rem;
+  font-size: 0.7rem;
+  height: auto;
+  min-height: 0;
 }
 
 .box {

@@ -67,6 +67,9 @@ document.addEventListener('drop', async (e) => {
     
     // Enable retarget button
     document.getElementById('btn-retarget').disabled = false;
+    
+    // Enable add animation button
+    document.getElementById('btn-add-animation').disabled = false;
   };
   reader.readAsArrayBuffer(file);
 });

@@ -283,4 +283,31 @@ export class AnimationManager {
   getAnimations() {
     return this.animations;
   }
+  
+  /**
+   * Add new animations to the existing animation list
+   * @param {Array} newAnimations - Array of THREE.AnimationClip objects to add
+   */
+  addAnimations(newAnimations) {
+    if (!newAnimations || newAnimations.length === 0) {
+      return;
+    }
+    
+    // Add new animations to the list
+    this.animations.push(...newAnimations);
+    
+    // Update UI
+    this.populateAnimationList();
+    this.updatePlaybackButtonsUI();
+    
+    return this.animations.length;
+  }
+  
+  /**
+   * Check if model has any animations
+   */
+  hasAnimations() {
+    return this.animations && this.animations.length > 0;
+  }
 }
+

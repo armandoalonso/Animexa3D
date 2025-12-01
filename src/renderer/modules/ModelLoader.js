@@ -122,6 +122,30 @@ export class ModelLoader {
     };
   }
   
+  /**
+   * Extract all bones from model hierarchy (for animation files without skinned meshes)
+   * @param {THREE.Object3D} model - The model to extract bones from
+   * @returns {Object} - Skeleton information with bones and bone names
+   */
+  extractAllBones(model) {
+    const bones = [];
+    const boneNames = [];
+    
+    model.traverse((child) => {
+      // Check if this is a bone (has isBone property or type is 'Bone')
+      if (child.isBone || child.type === 'Bone') {
+        bones.push(child);
+        boneNames.push(child.name);
+      }
+    });
+    
+    return {
+      skeletons: [],
+      bones,
+      boneNames
+    };
+  }
+  
   countPolygons(model) {
     let count = 0;
     model.traverse((child) => {
@@ -157,4 +181,118 @@ export class ModelLoader {
   getCurrentModelData() {
     return this.currentModelData;
   }
+  
+  /**
+   * Load animation file to extract animations and bone structure
+   * Used for adding animations from external files
+   */
+  async loadAnimationFile(arrayBuffer, extension, filename) {
+    try {
+      let modelData;
+      
+      if (extension === 'glb' || extension === 'gltf') {
+        modelData = await this.loadGLTF(arrayBuffer);
+      } else if (extension === 'fbx') {
+        modelData = await this.loadFBX(arrayBuffer);
+      } else {
+        throw new Error(`Unsupported file format: ${extension}`);
+      }
+      
+      modelData.filename = filename;
+      
+      // If no bones found in skeletons (animation files often don't have skinned meshes),
+      // extract all bones from the hierarchy
+      let skeletons = modelData.skeletons;
+      if (!skeletons.boneNames || skeletons.boneNames.length === 0) {
+        console.log('No bones found in skinned meshes, extracting from hierarchy...');
+        skeletons = this.extractAllBones(modelData.model);
+        console.log('Found bones in hierarchy:', skeletons.boneNames.length);
+      }
+      
+      return {
+        filename: filename,
+        animations: modelData.animations || [],
+        skeletons: skeletons,
+        boneNames: skeletons.boneNames || []
+      };
+      
+    } catch (error) {
+      console.error('Error loading animation file:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Verify if two bone structures are compatible
+   * Returns { compatible: boolean, message: string, matchPercentage: number, missingBones: array, extraBones: array }
+   */
+  verifyBoneStructureCompatibility(sourceSkeletons, targetSkeletons) {
+    if (!sourceSkeletons || !targetSkeletons) {
+      return {
+        compatible: false,
+        message: 'One or both models have no skeleton data',
+        matchPercentage: 0,
+        missingBones: [],
+        extraBones: []
+      };
+    }
+    
+    const sourceBones = new Set(sourceSkeletons.boneNames || []);
+    const targetBones = new Set(targetSkeletons.boneNames || []);
+    
+    if (sourceBones.size === 0 || targetBones.size === 0) {
+      return {
+        compatible: false,
+        message: 'One or both models have no bones',
+        matchPercentage: 0,
+        missingBones: [],
+        extraBones: []
+      };
+    }
+    
+    // Find matching, missing, and extra bones
+    const matchingBones = [];
+    const missingBones = [];
+    const extraBones = [];
+    
+    for (const bone of sourceBones) {
+      if (targetBones.has(bone)) {
+        matchingBones.push(bone);
+      } else {
+        missingBones.push(bone);
+      }
+    }
+    
+    for (const bone of targetBones) {
+      if (!sourceBones.has(bone)) {
+        extraBones.push(bone);
+      }
+    }
+    
+    const matchPercentage = (matchingBones.length / sourceBones.size) * 100;
+    
+    // Consider compatible if at least 80% of bones match
+    const compatible = matchPercentage >= 80;
+    
+    let message;
+    if (matchPercentage === 100) {
+      message = 'Perfect match! All bones are compatible.';
+    } else if (compatible) {
+      message = `Good match! ${matchPercentage.toFixed(1)}% of bones are compatible.`;
+    } else {
+      message = `Poor match. Only ${matchPercentage.toFixed(1)}% of bones are compatible. Animation may not work correctly.`;
+    }
+    
+    return {
+      compatible,
+      message,
+      matchPercentage: Math.round(matchPercentage),
+      matchingBones,
+      missingBones,
+      extraBones,
+      sourceBoneCount: sourceBones.size,
+      targetBoneCount: targetBones.size
+    };
+  }
 }
+

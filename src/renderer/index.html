@@ -59,6 +59,10 @@
       <aside class="sidebar sidebar-left">
         <div class="sidebar-header">
           <p class="title is-6">Animations</p>
+          <button id="btn-add-animation" class="button is-small is-primary" disabled style="margin-left: auto;">
+            <span class="icon">➕</span>
+            <span>Add</span>
+          </button>
         </div>
         <div id="animation-list" class="animation-list">
           <div class="empty-state">
@@ -502,6 +506,139 @@
       </section>
       <footer class="modal-card-foot">
         <button class="button">Close</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Add Animation Modal -->
+  <div id="add-animation-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title">Add Animation from File</p>
+        <button class="delete" aria-label="close"></button>
+      </header>
+      <section class="modal-card-body">
+        <div class="notification is-info is-light">
+          <p><strong>Load an animation file (FBX/GLTF) to add animations to your current model.</strong></p>
+          <p class="help">The bone structure must match your current model.</p>
+        </div>
+        
+        <div class="field">
+          <label class="label">Load Animation File</label>
+          <button id="btn-load-animation-file" class="button is-primary">
+            <span class="icon">📂</span>
+            <span>Browse Animation File</span>
+          </button>
+        </div>
+
+        <div id="animation-file-info" style="display: none; margin-top: 1rem;">
+          <div class="box">
+            <p class="label">File Information</p>
+            <p><strong>File:</strong> <span id="anim-file-name">-</span></p>
+            <p><strong>Animations Found:</strong> <span id="anim-file-count">-</span></p>
+            <p><strong>Bones:</strong> <span id="anim-file-bones">-</span></p>
+          </div>
+
+          <!-- Bone Structure Verification -->
+          <div id="bone-verification" class="box">
+            <p class="label">Bone Structure Verification</p>
+            <div id="bone-verification-result">
+              <p class="has-text-grey">Verifying...</p>
+            </div>
+          </div>
+
+          <!-- Retargeting Section (shown when bones don't match) -->
+          <div id="retargeting-section" style="display: none;">
+            <div class="notification is-warning is-light">
+              <p><strong>⚠ Bone structures don't match perfectly.</strong></p>
+              <p class="help">Use retargeting to adapt animations to your model's skeleton.</p>
+            </div>
+
+            <div class="field is-grouped" style="margin-bottom: 1rem;">
+              <div class="control">
+                <button id="btn-auto-map-inline" class="button is-success is-small">
+                  <span class="icon">🤖</span>
+                  <span>Auto-Map Bones</span>
+                </button>
+              </div>
+              <div class="control">
+                <button id="btn-clear-mapping-inline" class="button is-warning is-small" disabled>
+                  <span class="icon">🗑️</span>
+                  <span>Clear Mapping</span>
+                </button>
+              </div>
+              <div class="control">
+                <button id="btn-toggle-bone-trees" class="button is-info is-small">
+                  <span class="icon">🌲</span>
+                  <span>Show Bone Trees</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Bone Mapping Info -->
+            <div id="inline-mapping-info" class="box" style="display: none;">
+              <p><strong>Mapped Bones:</strong> <span id="inline-mapped-count">0</span></p>
+              <p><strong>Confidence:</strong> <span id="inline-mapping-confidence">0%</span></p>
+            </div>
+
+            <!-- Bone Trees (collapsible) -->
+            <div id="inline-bone-trees" style="display: none; margin-top: 1rem;">
+              <div class="columns">
+                <div class="column">
+                  <label class="label is-small">Your Model Bones</label>
+                  <div id="inline-current-model-tree" class="bone-tree-container-small">
+                    <p class="has-text-grey">Loading...</p>
+                  </div>
+                </div>
+                <div class="column">
+                  <label class="label is-small">Animation File Bones</label>
+                  <div id="inline-animation-file-tree" class="bone-tree-container-small">
+                    <p class="has-text-grey">Loading...</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Manual Mapping -->
+              <div class="box" style="margin-top: 0.5rem;">
+                <p class="label is-small">Manual Mapping</p>
+                <div class="field is-grouped is-grouped-multiline">
+                  <div class="control is-expanded">
+                    <input type="text" id="inline-selected-current-bone" class="input is-small" readonly placeholder="Click your model bone...">
+                  </div>
+                  <div class="control">
+                    <button id="btn-create-mapping-inline" class="button is-primary is-small" disabled>→</button>
+                  </div>
+                  <div class="control is-expanded">
+                    <input type="text" id="inline-selected-anim-bone" class="input is-small" readonly placeholder="Click animation bone...">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Current Mappings List -->
+              <div class="box" style="margin-top: 0.5rem; max-height: 150px; overflow-y: auto;">
+                <p class="label is-small">Current Mappings</p>
+                <div id="inline-mapping-list">
+                  <p class="has-text-grey is-size-7">No mappings yet</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Animation Selection -->
+          <div id="animation-selection-container" style="display: none;">
+            <div class="field">
+              <label class="label">Select Animations to Add</label>
+              <div id="animation-selection-list" class="animation-selection-list">
+                <!-- Animation checkboxes will be added here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <footer class="modal-card-foot">
+        <button id="btn-add-selected-animations" class="button is-success" disabled>Add Selected Animations</button>
+        <button class="button">Cancel</button>
       </footer>
     </div>
   </div>
