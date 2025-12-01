@@ -6,6 +6,7 @@ import { AnimationManager } from './modules/AnimationManager.js';
 import { ExportManager } from './modules/ExportManager.js';
 import { UIManager } from './modules/UIManager.js';
 import { RetargetManager } from './modules/RetargetManager.js';
+import { TextureManager } from './modules/TextureManager.js';
 
 // Initialize managers
 const sceneManager = new SceneManager();
@@ -13,7 +14,8 @@ const modelLoader = new ModelLoader(sceneManager);
 const animationManager = new AnimationManager(sceneManager);
 const exportManager = new ExportManager(sceneManager, animationManager);
 const retargetManager = new RetargetManager(sceneManager, modelLoader, animationManager);
-const uiManager = new UIManager(sceneManager, modelLoader, animationManager, exportManager, retargetManager);
+const textureManager = new TextureManager();
+const uiManager = new UIManager(sceneManager, modelLoader, animationManager, exportManager, retargetManager, textureManager);
 
 // Start the render loop
 sceneManager.startRenderLoop();
@@ -23,23 +25,52 @@ window.addEventListener('resize', () => {
   sceneManager.handleResize();
 });
 
-// Drag and drop handling
-document.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  document.getElementById('drop-overlay').classList.add('active');
-});
+// Drag and drop handling for models (canvas only)
+const canvas = document.getElementById('webgl-canvas');
+const viewportContainer = document.querySelector('.viewport-container');
+const dropOverlayCanvas = document.getElementById('drop-overlay-canvas');
+
+// Disable pointer events on canvas during drag to let events reach the container
+document.addEventListener('dragenter', (e) => {
+  canvas.classList.add('drag-enabled');
+}, true);
 
 document.addEventListener('dragleave', (e) => {
-  if (e.target === document.body || e.target === document.documentElement) {
-    document.getElementById('drop-overlay').classList.remove('active');
+  // Only re-enable if we're leaving the document
+  if (!document.contains(e.relatedTarget) || e.relatedTarget === null) {
+    canvas.classList.remove('drag-enabled');
+  }
+}, true);
+
+document.addEventListener('drop', (e) => {
+  canvas.classList.remove('drag-enabled');
+}, true);
+
+viewportContainer.addEventListener('dragenter', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  dropOverlayCanvas.classList.add('active');
+});
+
+viewportContainer.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+});
+
+viewportContainer.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  
+  // Only remove overlay if leaving the viewport container
+  if (e.target === viewportContainer || !viewportContainer.contains(e.relatedTarget)) {
+    dropOverlayCanvas.classList.remove('active');
   }
 });
 
-document.addEventListener('drop', async (e) => {
+viewportContainer.addEventListener('drop', async (e) => {
   e.preventDefault();
   e.stopPropagation();
-  document.getElementById('drop-overlay').classList.remove('active');
+  dropOverlayCanvas.classList.remove('active');
 
   const files = e.dataTransfer.files;
   if (files.length === 0) return;
@@ -63,6 +94,17 @@ document.addEventListener('drop', async (e) => {
     } else {
       animationManager.loadAnimations([]);
       uiManager.showNotification('Model has no animations', 'warning');
+    }
+
+    // Extract and display textures
+    if (modelData && modelData.model) {
+      const materials = textureManager.extractMaterials(modelData.model);
+      if (materials.length > 0) {
+        await textureManager.extractEmbeddedTextures(materials);
+        uiManager.displayTextures();
+      } else {
+        uiManager.clearTextureDisplay();
+      }
     }
     
     // Enable retarget button

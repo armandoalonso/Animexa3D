@@ -17,6 +17,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listBoneMappings: () => 
     ipcRenderer.invoke('file:listBoneMappings'),
   
+  // Texture operations
+  openImageDialog: () => ipcRenderer.invoke('dialog:openImage'),
+  readImageFile: (imagePath) => ipcRenderer.invoke('file:readImage', imagePath),
+  saveTextureToTemp: (filename, bufferArray) => 
+    ipcRenderer.invoke('file:saveTextureToTemp', filename, bufferArray),
+  
   // Notifications
   showNotification: (title, body) => 
     ipcRenderer.invoke('notification:show', title, body)

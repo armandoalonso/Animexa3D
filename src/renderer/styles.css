@@ -203,10 +203,29 @@ html, body {
   letter-spacing: 0.5px;
 }
 
+/* Split Sidebar Sections */
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-section-animations {
+  flex: 1;
+  min-height: 0;
+  border-bottom: 2px solid #e0e6ed;
+}
+
+.sidebar-section-textures {
+  flex: 1;
+  min-height: 0;
+}
+
 /* Animation List */
 .animation-list {
   flex: 1;
   padding: 0.5rem;
+  overflow-y: auto;
 }
 
 .animation-list .empty-state {
@@ -238,6 +257,165 @@ html, body {
   font-weight: 500;
 }
 
+/* Texture List */
+.texture-list {
+  flex: 1;
+  padding: 0.5rem;
+  overflow-y: auto;
+}
+
+.texture-list .empty-state {
+  padding: 2rem;
+  text-align: center;
+  color: #6c757d;
+}
+
+.material-card {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border: 1px solid #e0e6ed;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.material-card:hover {
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.material-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e0e6ed;
+}
+
+.material-name {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 0.9rem;
+  flex: 1;
+}
+
+.texture-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.texture-slot {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  background: #ffffff;
+  border: 1px solid #e0e6ed;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.texture-slot:hover {
+  border-color: #ced4da;
+  background: #fafbfc;
+}
+
+.texture-thumbnail {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+  object-fit: cover;
+  background: #2a2a2a;
+  flex-shrink: 0;
+}
+
+.texture-thumbnail.no-texture {
+  background: linear-gradient(135deg, #f8f9fa 25%, #e9ecef 25%, #e9ecef 50%, #f8f9fa 50%, #f8f9fa 75%, #e9ecef 75%);
+  background-size: 8px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #adb5bd;
+  font-size: 0.7rem;
+}
+
+.texture-info {
+  flex: 1;
+  margin-left: 0.75rem;
+  min-width: 0;
+}
+
+.texture-label {
+  font-weight: 500;
+  font-size: 0.8rem;
+  color: #495057;
+  margin-bottom: 0.15rem;
+}
+
+.texture-source {
+  font-size: 0.75rem;
+  color: #6c757d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.texture-source.no-texture-text {
+  font-style: italic;
+  color: #adb5bd;
+}
+
+.texture-actions {
+  flex-shrink: 0;
+  margin-left: 0.5rem;
+}
+
+.btn-change-texture {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.75rem;
+  background: #00d1b2;
+  color: #ffffff;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.btn-change-texture:hover {
+  background: #00c4a7;
+  transform: translateY(-1px);
+}
+
+.btn-change-texture.btn-add-texture {
+  background: #3298dc;
+}
+
+.btn-change-texture.btn-add-texture:hover {
+  background: #2793da;
+}
+
+.texture-slot.empty-slot {
+  opacity: 0.7;
+}
+
+.texture-slot.empty-slot:hover {
+  opacity: 1;
+}
+
+.texture-slot-drag-over {
+  border: 2px dashed #00d1b2 !important;
+  background: rgba(0, 209, 178, 0.1) !important;
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 209, 178, 0.3);
+}
+
+.texture-slot-drag-over .texture-thumbnail {
+  border-color: #00d1b2 !important;
+  opacity: 0.7;
+}
+
 /* Viewport */
 .viewport-container {
   flex: 1;
@@ -249,10 +427,20 @@ html, body {
   overflow: hidden;
 }
 
+/* Texture Section Positioning for Overlay */
+.sidebar-section-textures {
+  position: relative;
+}
+
 #webgl-canvas {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+/* Allow drag events to pass through canvas to viewport container */
+#webgl-canvas.drag-enabled {
+  pointer-events: none;
 }
 
 /* Empty State Overlay */
@@ -267,7 +455,7 @@ html, body {
   justify-content: center;
   background: rgba(44, 62, 80, 0.95);
   pointer-events: none;
-  z-index: 1;
+  z-index: 2;
 }
 
 .empty-state-overlay.hidden {
@@ -334,22 +522,23 @@ html, body {
   color: #ffffff;
 }
 
-/* Drop Overlay */
-.drop-overlay {
-  position: fixed;
+/* Drop Overlay for Canvas */
+.drop-overlay-canvas {
+  position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(59, 130, 246, 0.9);
+  background: rgba(59, 130, 246, 0.92);
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 50;
   pointer-events: none;
+  backdrop-filter: blur(4px);
 }
 
-.drop-overlay.active {
+.drop-overlay-canvas.active {
   display: flex;
 }
 
@@ -359,6 +548,7 @@ html, body {
   border: 4px dashed white;
   padding: 3rem;
   border-radius: 10px;
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 .drop-content .title {
@@ -370,6 +560,61 @@ html, body {
 .drop-content .subtitle {
   color: #e0e0e0;
   font-size: 1.2rem;
+}
+
+/* Drop Overlay for Texture Section */
+.drop-overlay-textures {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 209, 178, 0.15);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  pointer-events: none;
+  border: 3px dashed #00d1b2;
+  border-radius: 6px;
+  margin: 0.5rem;
+}
+
+.drop-overlay-textures.active {
+  display: flex;
+}
+
+.drop-content-textures {
+  text-align: center;
+  color: #00d1b2;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid #00d1b2;
+  padding: 1.5rem 2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 209, 178, 0.3);
+}
+
+.drop-content-textures .title {
+  color: #00d1b2;
+  font-size: 1.2rem;
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.drop-content-textures .subtitle {
+  color: #495057;
+  font-size: 0.9rem;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.9;
+  }
 }
 
 /* Notification Container */

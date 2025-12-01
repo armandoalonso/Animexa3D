@@ -182,3 +182,54 @@ ipcMain.handle('notification:show', async (event, title, body) => {
   
   return { success: true };
 });
+
+// Open image file dialog
+ipcMain.handle('dialog:openImage', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [
+      { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tga', 'tiff', 'tif', 'webp'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+
+  if (result.canceled) {
+    return null;
+  }
+
+  return result.filePaths[0];
+});
+
+// Read image file as buffer
+ipcMain.handle('file:readImage', async (event, imagePath) => {
+  try {
+    const buffer = await fs.promises.readFile(imagePath);
+    return Array.from(buffer); // Convert Buffer to array for transfer
+  } catch (error) {
+    console.error('Error reading image file:', error);
+    throw error;
+  }
+});
+
+// Save texture to temp directory
+ipcMain.handle('file:saveTextureToTemp', async (event, filename, bufferArray) => {
+  try {
+    const tempDir = app.getPath('temp');
+    const texturesDir = path.join(tempDir, '3d-viewer-textures');
+    
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(texturesDir)) {
+      await fs.promises.mkdir(texturesDir, { recursive: true });
+    }
+    
+    const filePath = path.join(texturesDir, filename);
+    const buffer = Buffer.from(bufferArray);
+    
+    await fs.promises.writeFile(filePath, buffer);
+    
+    return filePath;
+  } catch (error) {
+    console.error('Error saving texture to temp:', error);
+    throw error;
+  }
+});

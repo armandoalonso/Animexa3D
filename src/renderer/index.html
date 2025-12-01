@@ -7,14 +7,6 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <!-- Drop Zone Overlay (hidden by default) -->
-  <div id="drop-overlay" class="drop-overlay">
-    <div class="drop-content">
-      <p class="title is-3">Drop 3D Model Here</p>
-      <p class="subtitle">Supported formats: GLB, GLTF, FBX</p>
-    </div>
-  </div>
-
   <!-- Notification Container -->
   <div id="notification-container" class="notification-container"></div>
 
@@ -55,24 +47,47 @@
 
     <!-- Main Content Area -->
     <div class="main-content">
-      <!-- Left Sidebar: Animation List -->
+      <!-- Left Sidebar: Animation List & Textures -->
       <aside class="sidebar sidebar-left">
-        <div class="sidebar-header">
-          <p class="title is-6">Animations</p>
-          <button id="btn-add-animation" class="button is-small is-primary" disabled style="margin-left: auto;">
-            <span class="icon">➕</span>
-            <span>Add</span>
-          </button>
+        <!-- Animations Section (Top Half) -->
+        <div class="sidebar-section sidebar-section-animations">
+          <div class="sidebar-header">
+            <p class="title is-6">Animations</p>
+            <button id="btn-add-animation" class="button is-small is-primary" disabled style="margin-left: auto;">
+              <span class="icon">➕</span>
+              <span>Add</span>
+            </button>
+          </div>
+          <div id="animation-list" class="animation-list">
+            <div class="empty-state">
+              <p class="has-text-grey">No model loaded</p>
+            </div>
+          </div>
         </div>
-        <div id="animation-list" class="animation-list">
-          <div class="empty-state">
-            <p class="has-text-grey">No model loaded</p>
+
+        <!-- Textures Section (Bottom Half) -->
+        <div class="sidebar-section sidebar-section-textures">
+          <div class="sidebar-header">
+            <p class="title is-6">Materials & Textures</p>
+          </div>
+          <div id="texture-list" class="texture-list">
+            <div class="empty-state">
+              <p class="has-text-grey">No model loaded</p>
+            </div>
           </div>
         </div>
       </aside>
 
       <!-- Center: 3D Viewport -->
       <div class="viewport-container">
+        <!-- Drop Zone Overlay for Canvas -->
+        <div id="drop-overlay-canvas" class="drop-overlay-canvas">
+          <div class="drop-content">
+            <p class="title is-3">Drop 3D Model Here</p>
+            <p class="subtitle">Supported formats: GLB, GLTF, FBX</p>
+          </div>
+        </div>
+        
         <canvas id="webgl-canvas"></canvas>
         <div id="empty-state" class="empty-state-overlay">
           <div class="empty-state-content">
