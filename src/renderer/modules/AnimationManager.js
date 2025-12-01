@@ -192,6 +192,7 @@ export class AnimationManager {
     
     if (hasAnimation) {
       document.getElementById('btn-export').disabled = false;
+      document.getElementById('btn-capture').disabled = false;
     }
   }
   
@@ -239,8 +240,25 @@ export class AnimationManager {
     const duration = this.currentAction.getClip().duration;
     const time = value * duration;
     
-    mixer.setTime(time);
+    // Pause the animation if playing to enable smooth scrubbing
+    const wasPlaying = this.isPlaying;
+    if (wasPlaying) {
+      this.currentAction.paused = true;
+    }
+    
+    // Set the animation time
+    this.currentAction.time = time;
+    
+    // Update the mixer to apply the new time
+    mixer.update(0);
+    
+    // Update UI
     document.getElementById('current-time').textContent = this.formatTime(time);
+    
+    // Resume playing if it was playing before
+    if (wasPlaying) {
+      this.currentAction.paused = false;
+    }
   }
   
   formatTime(seconds) {

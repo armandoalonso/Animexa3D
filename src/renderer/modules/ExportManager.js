@@ -7,6 +7,55 @@ export class ExportManager {
     this.exportFolder = null;
   }
   
+  // Helper function to format timestamp
+  getTimestamp() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    return `${year}${month}${day}${hours}${minutes}${seconds}`;
+  }
+  
+  async captureCurrentFrame(config) {
+    const { resolution, folder, transparentBackground } = config;
+    const [width, height] = resolution.split('x').map(Number);
+    
+    // Prepare offscreen rendering
+    const originalSettings = this.prepareOffscreenRender(width, height, transparentBackground);
+    
+    try {
+      // Render the scene at current state
+      const renderer = this.sceneManager.getRenderer();
+      const scene = this.sceneManager.getScene();
+      const camera = this.sceneManager.getCamera();
+      renderer.render(scene, camera);
+      
+      // Capture frame
+      const dataURL = renderer.domElement.toDataURL('image/png');
+      
+      // Create snapshots subfolder with timestamp filename
+      const timestamp = this.getTimestamp();
+      const subfolder = 'snapshots';
+      const filename = `${timestamp}.png`;
+      
+      // Save frame via IPC
+      const result = await window.electronAPI.saveFrame(folder, filename, dataURL, subfolder);
+      
+      if (!result.success) {
+        throw new Error(`Failed to save frame: ${result.error}`);
+      }
+      
+      return result;
+      
+    } finally {
+      // Restore original renderer settings
+      this.restoreRenderer(originalSettings);
+    }
+  }
+  
   async startExport(config) {
     if (this.isExporting) return;
     
@@ -32,6 +81,10 @@ export class ExportManager {
     // Show progress modal
     const progressModal = document.getElementById('progress-modal');
     progressModal.classList.add('is-active');
+    
+    // Create subfolder with timestamp for this export batch
+    const timestamp = this.getTimestamp();
+    const subfolder = timestamp;
     
     // Prepare offscreen rendering
     const originalSettings = this.prepareOffscreenRender(width, height, transparentBackground);
@@ -70,8 +123,8 @@ export class ExportManager {
         // Generate filename with zero-padding
         const filename = `frame_${String(i).padStart(3, '0')}.png`;
         
-        // Save frame via IPC
-        const result = await window.electronAPI.saveFrame(folder, filename, dataURL);
+        // Save frame via IPC with subfolder
+        const result = await window.electronAPI.saveFrame(folder, filename, dataURL, subfolder);
         
         if (!result.success) {
           throw new Error(`Failed to save frame ${i}: ${result.error}`);

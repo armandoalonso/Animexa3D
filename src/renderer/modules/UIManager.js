@@ -15,10 +15,10 @@ export class UIManager {
     // File operations
     document.getElementById('btn-open-model').addEventListener('click', () => this.handleOpenModel());
     document.getElementById('btn-export').addEventListener('click', () => this.handleOpenExportModal());
+    document.getElementById('btn-capture').addEventListener('click', () => this.handleCaptureFrame());
     
     // Scene controls
     document.getElementById('bg-color').addEventListener('input', (e) => this.handleBackgroundColor(e));
-    document.getElementById('bg-color-hex').addEventListener('input', (e) => this.handleBackgroundColorHex(e));
     document.getElementById('camera-preset').addEventListener('change', (e) => this.handleCameraPreset(e));
     document.getElementById('grid-toggle').addEventListener('change', (e) => this.handleGridToggle(e));
     
@@ -46,6 +46,11 @@ export class UIManager {
     document.getElementById('btn-choose-folder').addEventListener('click', () => this.handleChooseExportFolder());
     document.getElementById('btn-start-export').addEventListener('click', () => this.handleStartExport());
     document.getElementById('btn-cancel-export').addEventListener('click', () => this.handleCancelExport());
+    
+    // Capture modal
+    document.getElementById('capture-resolution').addEventListener('change', (e) => this.handleCaptureResolutionChange(e));
+    document.getElementById('btn-choose-capture-folder').addEventListener('click', () => this.handleChooseCaptureFolder());
+    document.getElementById('btn-do-capture').addEventListener('click', () => this.handleDoCapture());
     
     // Modal close buttons
     document.querySelectorAll('.modal .delete').forEach(btn => {
@@ -100,16 +105,7 @@ export class UIManager {
   
   handleBackgroundColor(event) {
     const color = event.target.value;
-    document.getElementById('bg-color-hex').value = color;
     this.sceneManager.setBackgroundColor(color);
-  }
-  
-  handleBackgroundColorHex(event) {
-    const color = event.target.value;
-    if (/^#[0-9A-F]{6}$/i.test(color)) {
-      document.getElementById('bg-color').value = color;
-      this.sceneManager.setBackgroundColor(color);
-    }
   }
   
   handleCameraPreset(event) {
@@ -219,6 +215,64 @@ export class UIManager {
   
   handleCancelExport() {
     this.exportManager.cancelCurrentExport();
+  }
+  
+  handleCaptureFrame() {
+    // Open the capture modal
+    document.getElementById('capture-modal').classList.add('is-active');
+    
+    // Pre-fill with export folder if it exists
+    const exportFolder = this.exportManager.getExportFolder();
+    if (exportFolder) {
+      document.getElementById('capture-folder').value = exportFolder;
+      document.getElementById('btn-do-capture').disabled = false;
+    }
+  }
+  
+  handleCaptureResolutionChange(event) {
+    const customDiv = document.getElementById('capture-custom-resolution');
+    if (event.target.value === 'custom') {
+      customDiv.style.display = 'block';
+    } else {
+      customDiv.style.display = 'none';
+    }
+  }
+  
+  async handleChooseCaptureFolder() {
+    const folder = await window.electronAPI.chooseExportFolder();
+    if (folder) {
+      document.getElementById('capture-folder').value = folder;
+      document.getElementById('btn-do-capture').disabled = false;
+    }
+  }
+  
+  async handleDoCapture() {
+    const resolutionSelect = document.getElementById('capture-resolution').value;
+    const folder = document.getElementById('capture-folder').value;
+    const transparentBackground = document.getElementById('capture-transparent-bg-toggle').checked;
+    
+    if (!folder) {
+      this.showNotification('Please select an output folder', 'warning');
+      return;
+    }
+    
+    let resolution;
+    if (resolutionSelect === 'custom') {
+      const size = parseInt(document.getElementById('capture-size').value);
+      resolution = `${size}x${size}`;
+    } else {
+      resolution = resolutionSelect;
+    }
+    
+    // Close the modal
+    document.getElementById('capture-modal').classList.remove('is-active');
+    
+    try {
+      await this.exportManager.captureCurrentFrame({ resolution, folder, transparentBackground });
+      this.showNotification('Frame captured successfully!', 'success');
+    } catch (error) {
+      this.showNotification(`Failed to capture frame: ${error.message}`, 'error');
+    }
   }
   
   showNotification(message, type = 'info', duration = 5000) {

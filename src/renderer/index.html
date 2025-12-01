@@ -39,6 +39,10 @@
                 <span class="icon"><span>💾</span></span>
                 <span>Export Frames</span>
               </button>
+              <button id="btn-capture" class="button is-warning" disabled>
+                <span class="icon"><span>📸</span></span>
+                <span>Capture Frame</span>
+              </button>
               <button id="btn-retarget" class="button is-info" disabled>
                 <span class="icon"><span>🔄</span></span>
                 <span>Retarget Animation</span>
@@ -88,12 +92,9 @@
         </div>
         <div class="control-section">
           <label class="label">Background Color</label>
-          <div class="field has-addons">
+          <div class="field">
             <div class="control">
-              <input type="color" id="bg-color" class="input" value="#2c3e50">
-            </div>
-            <div class="control is-expanded">
-              <input type="text" id="bg-color-hex" class="input" value="#2c3e50">
+              <input type="color" id="bg-color" class="input color-input-fullwidth" value="#2c3e50">
             </div>
           </div>
         </div>
@@ -162,14 +163,14 @@
     <!-- Bottom Timeline Panel -->
     <div class="timeline-panel">
       <div class="timeline-controls">
-        <button id="btn-play" class="button is-small" disabled>
-          <span class="icon">▶️</span>
+        <button id="btn-play" class="button is-small is-success" disabled>
+          <span class="icon">▶</span>
         </button>
-        <button id="btn-pause" class="button is-small" disabled>
-          <span class="icon">⏸️</span>
+        <button id="btn-pause" class="button is-small is-warning" disabled>
+          <span class="icon">⏸</span>
         </button>
-        <button id="btn-stop" class="button is-small" disabled>
-          <span class="icon">⏹️</span>
+        <button id="btn-stop" class="button is-small is-danger" disabled>
+          <span class="icon">⏹</span>
         </button>
         <label class="checkbox ml-3">
           <input type="checkbox" id="loop-toggle"> Loop
@@ -273,6 +274,62 @@
       </section>
       <footer class="modal-card-foot">
         <button id="btn-cancel-export" class="button is-danger">Cancel</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Capture Frame Modal -->
+  <div id="capture-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title">Capture Current Frame</p>
+        <button class="delete" aria-label="close"></button>
+      </header>
+      <section class="modal-card-body">
+        <div class="field">
+          <label class="label">Resolution</label>
+          <div class="select is-fullwidth">
+            <select id="capture-resolution">
+              <option value="128x128">128x128</option>
+              <option value="256x256">256x256</option>
+              <option value="512x512">512x512</option>
+              <option value="1024x1024" selected>1024x1024</option>
+              <option value="2048x2048">2048x2048</option>
+              <option value="4096x4096">4096x4096</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+        </div>
+        <div id="capture-custom-resolution" class="field" style="display: none;">
+          <label class="label">Size</label>
+          <input type="number" id="capture-size" class="input" value="1024" min="1" placeholder="Square resolution">
+        </div>
+        <div class="field">
+          <label class="label">Output Folder</label>
+          <div class="field has-addons">
+            <div class="control is-expanded">
+              <input type="text" id="capture-folder" class="input" readonly placeholder="Choose folder...">
+            </div>
+            <div class="control">
+              <button id="btn-choose-capture-folder" class="button is-info">Browse</button>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="checkbox">
+            <input type="checkbox" id="capture-transparent-bg-toggle">
+            Transparent Background
+          </label>
+          <p class="help">Save with alpha channel (transparent background)</p>
+        </div>
+        <div class="notification is-info is-light">
+          <p><strong>Output:</strong> Saved to snapshots/{yyyyMMddhhmmss}.png</p>
+        </div>
+      </section>
+      <footer class="modal-card-foot">
+        <button id="btn-do-capture" class="button is-warning" disabled>Capture Frame</button>
+        <button class="button">Cancel</button>
       </footer>
     </div>
   </div>

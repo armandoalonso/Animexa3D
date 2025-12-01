@@ -6,8 +6,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // File operations
   openModelDialog: () => ipcRenderer.invoke('dialog:openModel'),
   chooseExportFolder: () => ipcRenderer.invoke('dialog:chooseExportFolder'),
-  saveFrame: (folderPath, filename, dataURL) => 
-    ipcRenderer.invoke('file:saveFrame', folderPath, filename, dataURL),
+  saveFrame: (folderPath, filename, dataURL, subfolder) => 
+    ipcRenderer.invoke('file:saveFrame', folderPath, filename, dataURL, subfolder),
   
   // Bone mapping operations
   saveBoneMapping: (name, mappingData) => 

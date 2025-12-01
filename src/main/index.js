@@ -88,11 +88,22 @@ ipcMain.handle('dialog:chooseExportFolder', async () => {
 });
 
 // Save a single frame
-ipcMain.handle('file:saveFrame', async (event, folderPath, filename, dataURL) => {
+ipcMain.handle('file:saveFrame', async (event, folderPath, filename, dataURL, subfolder = null) => {
   try {
     // Remove data URL prefix
     const base64Data = dataURL.replace(/^data:image\/png;base64,/, '');
-    const filePath = path.join(folderPath, filename);
+    
+    // Create the target directory (with subfolder if provided)
+    let targetDir = folderPath;
+    if (subfolder) {
+      targetDir = path.join(folderPath, subfolder);
+      // Create subfolder if it doesn't exist
+      if (!fs.existsSync(targetDir)) {
+        await fs.promises.mkdir(targetDir, { recursive: true });
+      }
+    }
+    
+    const filePath = path.join(targetDir, filename);
     
     await fs.promises.writeFile(filePath, base64Data, 'base64');
     
