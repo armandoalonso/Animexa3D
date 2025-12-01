@@ -785,30 +785,84 @@
               <p><strong>Mapped Bones:</strong> <span id="inline-mapped-count">0</span></p>
               <p><strong>Confidence:</strong> <span id="inline-mapping-confidence">0%</span></p>
               
-              <!-- Retargeting Options -->
-              <div class="field" style="margin-top: 1rem;">
-                <label class="label is-small">Retargeting Options</label>
-                <label class="checkbox">
-                  <input type="checkbox" id="preserve-hip-position-inline" checked>
-                  Preserve Root Motion
-                </label>
-                <p class="help">Keep root/hip position and movement from the animation (important for walk cycles, running, etc.)</p>
+              <!-- Root Bone Selection -->
+              <div style="margin-top: 1rem;">
+                <label class="label is-small">Root Bone Selection</label>
+                <p class="help is-size-7">Select the root bone for each rig. This is used for root motion preservation (walk cycles, locomotion, etc.)</p>
                 
-                <label class="checkbox" style="margin-top: 0.5rem;">
-                  <input type="checkbox" id="apply-rest-pose-correction" checked>
-                  Apply Rest Pose Correction (Experimental)
-                </label>
-                <p class="help">Attempts to correct T-pose/A-pose differences by analyzing rest poses</p>
+                <div class="columns">
+                  <div class="column">
+                    <label class="label is-small">Your Model Root Bone</label>
+                    <div class="select is-fullwidth is-small">
+                      <select id="inline-target-root-bone-select">
+                        <option value="">Auto-detect...</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="column">
+                    <label class="label is-small">Animation File Root Bone</label>
+                    <div class="select is-fullwidth is-small">
+                      <select id="inline-source-root-bone-select">
+                        <option value="">Auto-detect...</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
               </div>
               
-              <div class="notification is-warning is-light" style="margin-top: 0.5rem;">
-                <p class="is-size-7"><strong>Rest Pose Correction:</strong></p>
-                <p class="is-size-7">This tool will attempt to calculate and apply rotational offsets between your model's rest pose and the animation's rest pose. This can help with T-pose vs A-pose mismatches.</p>
-                <ul class="is-size-7" style="margin-left: 1rem; margin-top: 0.25rem;">
-                  <li><strong>✓ What it does:</strong> Analyzes first frame rotations and applies corrections</li>
-                  <li><strong>⚠ Limitations:</strong> Works best for similar skeletons, may need manual adjustment</li>
-                  <li><strong>💡 Tip:</strong> Disable if animation looks worse with it enabled</li>
-                </ul>
+              <!-- Retargeting Options -->
+              <div style="margin-top: 1rem;">
+                <label class="label is-small">Retargeting Options</label>
+                
+                <div class="field">
+                  <label class="label is-small">Source Bind Pose Mode</label>
+                  <div class="control">
+                    <div class="select is-fullwidth is-small">
+                      <select id="inline-source-pose-mode">
+                        <option value="0" selected>Default (Use Actual Bind Pose)</option>
+                        <option value="1">Current (Use Current Pose)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p class="help is-size-7">Choose which pose to use as bind pose for animation skeleton</p>
+                </div>
+                
+                <div class="field">
+                  <label class="label is-small">Target Bind Pose Mode</label>
+                  <div class="control">
+                    <div class="select is-fullwidth is-small">
+                      <select id="inline-target-pose-mode">
+                        <option value="0" selected>Default (Use Actual Bind Pose)</option>
+                        <option value="1">Current (Use Current Pose)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p class="help is-size-7">Choose which pose to use as bind pose for your model skeleton</p>
+                </div>
+                
+                <div class="field">
+                  <label class="checkbox">
+                    <input type="checkbox" id="inline-apply-tpose" />
+                    Apply T-Pose Normalization
+                  </label>
+                  <p class="help is-size-7">Normalize both skeletons to T-pose before retargeting</p>
+                </div>
+                
+                <div class="field">
+                  <label class="checkbox">
+                    <input type="checkbox" id="inline-embed-transforms" checked />
+                    Embed World Transforms
+                  </label>
+                  <p class="help is-size-7">Include parent object transforms (recommended)</p>
+                </div>
+                
+                <div class="field">
+                  <label class="checkbox">
+                    <input type="checkbox" id="preserve-hip-position-inline" checked>
+                    Preserve Root Motion
+                  </label>
+                  <p class="help is-size-7">Keep root/hip position and movement from the animation (important for walk cycles, running, etc.)</p>
+                </div>
               </div>
             </div>
 

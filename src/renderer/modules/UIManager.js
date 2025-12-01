@@ -101,6 +101,8 @@ export class UIManager {
     document.getElementById('btn-clear-mapping-inline').addEventListener('click', () => this.handleInlineClearMapping());
     document.getElementById('btn-toggle-bone-trees').addEventListener('click', () => this.handleToggleBoneTrees());
     document.getElementById('btn-create-mapping-inline').addEventListener('click', () => this.handleInlineCreateMapping());
+    document.getElementById('inline-target-root-bone-select').addEventListener('change', (e) => this.handleInlineTargetRootBoneChange(e));
+    document.getElementById('inline-source-root-bone-select').addEventListener('change', (e) => this.handleInlineSourceRootBoneChange(e));
     
     // Modal close buttons
     document.querySelectorAll('.modal .delete').forEach(btn => {
@@ -1187,6 +1189,8 @@ export class UIManager {
     this.inlineBoneMapping = {};
     this.inlineSelectedCurrentBone = null;
     this.inlineSelectedAnimBone = null;
+    this.inlineSelectedTargetRootBone = null;
+    this.inlineSelectedSourceRootBone = null;
     
     // Setup drag-drop handlers for animation files
     const dropZone = document.getElementById('animation-drop-zone');
@@ -1506,6 +1510,9 @@ export class UIManager {
       confidencePercent > 70 ? 'success' : 'warning'
     );
     
+    // Populate root bone dropdowns
+    this.populateInlineRootBoneDropdowns();
+    
     // Update mappings display if tree is visible
     if (document.getElementById('inline-bone-trees').style.display === 'block') {
       this.updateInlineMappingDisplay();
@@ -1529,6 +1536,36 @@ export class UIManager {
     
     this.updateInlineMappingDisplay();
     this.showNotification('Mappings cleared', 'info');
+  }
+  
+  /**
+   * Handle inline target root bone selection change
+   */
+  handleInlineTargetRootBoneChange(event) {
+    const boneName = event.target.value;
+    
+    if (boneName) {
+      this.inlineSelectedTargetRootBone = boneName;
+      this.showNotification(`Your model root bone set to: ${boneName}`, 'info', 3000);
+    } else {
+      this.inlineSelectedTargetRootBone = null;
+      this.showNotification('Using auto-detected root bone for your model', 'info', 3000);
+    }
+  }
+  
+  /**
+   * Handle inline source root bone selection change
+   */
+  handleInlineSourceRootBoneChange(event) {
+    const boneName = event.target.value;
+    
+    if (boneName) {
+      this.inlineSelectedSourceRootBone = boneName;
+      this.showNotification(`Animation file root bone set to: ${boneName}`, 'info', 3000);
+    } else {
+      this.inlineSelectedSourceRootBone = null;
+      this.showNotification('Using auto-detected root bone for animation file', 'info', 3000);
+    }
   }
   
   handleToggleBoneTrees() {
@@ -1625,6 +1662,44 @@ export class UIManager {
     html += '</div>';
     
     return html;
+  }
+  
+  /**
+   * Populate inline root bone dropdowns
+   */
+  populateInlineRootBoneDropdowns() {
+    if (!this.loadedAnimationData || !this.modelLoader.getCurrentModelData()) {
+      return;
+    }
+    
+    const currentModel = this.modelLoader.getCurrentModelData();
+    const animData = this.loadedAnimationData;
+    
+    // Populate target (your model) root bone dropdown
+    const targetSelect = document.getElementById('inline-target-root-bone-select');
+    targetSelect.innerHTML = '<option value="">Auto-detect...</option>';
+    
+    if (currentModel.skeletons && currentModel.skeletons.boneNames) {
+      currentModel.skeletons.boneNames.forEach(boneName => {
+        const option = document.createElement('option');
+        option.value = boneName;
+        option.textContent = boneName;
+        targetSelect.appendChild(option);
+      });
+    }
+    
+    // Populate source (animation file) root bone dropdown
+    const sourceSelect = document.getElementById('inline-source-root-bone-select');
+    sourceSelect.innerHTML = '<option value="">Auto-detect...</option>';
+    
+    if (animData.boneNames) {
+      animData.boneNames.forEach(boneName => {
+        const option = document.createElement('option');
+        option.value = boneName;
+        option.textContent = boneName;
+        sourceSelect.appendChild(option);
+      });
+    }
   }
   
   addInlineBoneClickHandlers() {
@@ -1843,13 +1918,25 @@ export class UIManager {
     // If retargeting is active and we have mappings, use robust retargeting
     if (this.inlineRetargetingActive && Object.keys(this.inlineBoneMapping).length > 0) {
       const currentModel = this.modelLoader.getCurrentModelData();
+      
+      // Read retargeting options from UI (same as main window)
+      const sourcePoseMode = parseInt(document.getElementById('inline-source-pose-mode').value);
+      const targetPoseMode = parseInt(document.getElementById('inline-target-pose-mode').value);
+      const applyTPose = document.getElementById('inline-apply-tpose').checked;
+      const embedTransforms = document.getElementById('inline-embed-transforms').checked;
       const preserveRootMotion = document.getElementById('preserve-hip-position-inline').checked;
       
-      console.log('=== ROBUST RETARGETING ANIMATION ===');
+      console.log('=== ROBUST RETARGETING ANIMATION (MODAL) ===');
       console.log('Bone mapping (current->anim):', this.inlineBoneMapping);
       console.log('Animation bones:', this.loadedAnimationData.boneNames);
       console.log('Current model bones:', currentModel.skeletons.boneNames);
-      console.log('Preserve root motion:', preserveRootMotion);
+      console.log('Options:', {
+        sourcePoseMode,
+        targetPoseMode,
+        applyTPose,
+        embedTransforms,
+        preserveRootMotion
+      });
       
       // Invert the bone mapping for retargeting
       // inlineBoneMapping is: currentModelBone -> animBone
@@ -1869,6 +1956,35 @@ export class UIManager {
         console.log(`    ${src} → ${trg}`);
       }
       
+      // Apply user-selected root bones if specified
+      if (this.inlineSelectedSourceRootBone) {
+        this.retargetManager.setSourceRootBone(this.inlineSelectedSourceRootBone);
+        console.log('Using user-selected source root bone:', this.inlineSelectedSourceRootBone);
+      }
+      if (this.inlineSelectedTargetRootBone) {
+        this.retargetManager.setTargetRootBone(this.inlineSelectedTargetRootBone);
+        console.log('Using user-selected target root bone:', this.inlineSelectedTargetRootBone);
+      }
+      
+      // If preserving root motion, ensure root bones are mapped
+      if (preserveRootMotion) {
+        const effectiveSourceRoot = this.retargetManager.getEffectiveSourceRootBone();
+        const effectiveTargetRoot = this.retargetManager.getEffectiveTargetRootBone();
+        
+        if (effectiveSourceRoot && effectiveTargetRoot) {
+          if (!invertedMapping[effectiveSourceRoot]) {
+            invertedMapping[effectiveSourceRoot] = effectiveTargetRoot;
+            console.log(`🎯 Added root bone mapping for root motion: ${effectiveSourceRoot} → ${effectiveTargetRoot}`);
+            this.showNotification(`Added root bone mapping: ${effectiveSourceRoot} → ${effectiveTargetRoot}`, 'info', 4000);
+          } else {
+            console.log(`✓ Root bone already mapped: ${effectiveSourceRoot} → ${invertedMapping[effectiveSourceRoot]}`);
+          }
+        } else {
+          console.warn('⚠️ Root motion enabled but root bones not identified');
+          this.showNotification('Warning: Root bones not identified. Root motion may not work correctly.', 'warning', 5000);
+        }
+      }
+      
       try {
         // Setup retargeting using the robust RetargetManager
         // Set animation data as source (can be animation file structure)
@@ -1878,8 +1994,50 @@ export class UIManager {
         // Apply bone mapping
         this.retargetManager.boneMapping = invertedMapping;
         
-        // Initialize retargeting (compute bind poses, precompute quaternions, etc.)
-        this.retargetManager.initializeRetargeting();
+        // Apply T-pose normalization BEFORE initializing if requested
+        if (applyTPose) {
+          console.log('Applying T-pose normalization to bind poses...');
+          try {
+            const sourceSkeleton = this.retargetManager.getSourceSkeleton();
+            const targetSkeleton = this.retargetManager.getTargetSkeleton();
+            
+            if (sourceSkeleton) {
+              this.retargetManager.applyTPose(sourceSkeleton);
+              console.log('✓ Source skeleton normalized to T-pose');
+            } else {
+              console.warn('Could not get source skeleton for T-pose');
+            }
+            
+            if (targetSkeleton) {
+              this.retargetManager.applyTPose(targetSkeleton);
+              console.log('✓ Target skeleton normalized to T-pose');
+            } else {
+              console.warn('Could not get target skeleton for T-pose');
+            }
+          } catch (tposeError) {
+            console.error('T-pose normalization error:', tposeError);
+            this.showNotification(
+              'Warning: T-pose normalization failed, proceeding without it',
+              'warning'
+            );
+          }
+        }
+        
+        // Initialize retargeting with options (same as main window)
+        // If T-pose was applied, use CURRENT mode to capture the T-posed skeleton
+        const options = {
+          srcPoseMode: applyTPose ? 1 : sourcePoseMode, // 1 = CURRENT if T-posed
+          trgPoseMode: applyTPose ? 1 : targetPoseMode, // 1 = CURRENT if T-posed
+          srcEmbedWorld: embedTransforms,
+          trgEmbedWorld: embedTransforms
+        };
+        
+        console.log('Initializing with pose modes:', {
+          source: applyTPose ? 'CURRENT (T-posed)' : (sourcePoseMode === 0 ? 'DEFAULT' : 'CURRENT'),
+          target: applyTPose ? 'CURRENT (T-posed)' : (targetPoseMode === 0 ? 'DEFAULT' : 'CURRENT')
+        });
+        
+        this.retargetManager.initializeRetargeting(options);
         
         // Retarget each animation
         const retargetedAnimations = [];
@@ -1939,162 +2097,6 @@ export class UIManager {
     
     // Close modal
     document.getElementById('add-animation-modal').classList.remove('is-active');
-  }
-  
-  retargetAnimationForCurrentModel(sourceClip, boneMapping, preserveHipPosition = false, restPoseOffsets = null) {
-    // Clone the animation clip
-    const newClip = sourceClip.clone();
-    newClip.name = sourceClip.name;
-    
-    console.log(`  Retargeting clip: ${sourceClip.name}`);
-    
-    // Identify root/hip bones (common names)
-    const rootBonePatterns = /^(hips?|pelvis|root|spine_?0?0?1?)$/i;
-    
-    // Remap track names based on bone mapping
-    const newTracks = [];
-    let mappedCount = 0;
-    let unmappedCount = 0;
-    let skippedRootCount = 0;
-    let correctedCount = 0;
-    
-    for (const track of newClip.tracks) {
-      // Extract bone name from track name (format: boneName.property)
-      const trackParts = track.name.split('.');
-      const boneName = trackParts.slice(0, -1).join('.');
-      const property = trackParts[trackParts.length - 1];
-      
-      // Check if this is a root/hip bone and if we should preserve its position
-      const isRootBone = rootBonePatterns.test(boneName);
-      const isPositionTrack = property === 'position';
-      
-      if (isRootBone && isPositionTrack && !preserveHipPosition) {
-        // Skip root position tracks to prevent model from moving incorrectly
-        console.log(`    ⊗ Skipped root position track: ${track.name} (to prevent position issues)`);
-        skippedRootCount++;
-        continue;
-      }
-      
-      // Check if this bone is mapped
-      const mappedBone = boneMapping[boneName];
-      
-      if (mappedBone) {
-        // Create new track with mapped bone name
-        const newTrackName = `${mappedBone}.${property}`;
-        const TrackType = track.constructor;
-        let newTrack;
-        
-        // Apply rest pose correction if available and this is a quaternion rotation track
-        if (restPoseOffsets && property === 'quaternion' && restPoseOffsets[mappedBone]) {
-          newTrack = this.applyRestPoseOffset(track, restPoseOffsets[mappedBone], newTrackName);
-          correctedCount++;
-        } else {
-          newTrack = new TrackType(newTrackName, track.times, track.values);
-        }
-        
-        newTracks.push(newTrack);
-        mappedCount++;
-      } else {
-        // Keep original track if no mapping found (might still work if bone names match)
-        newTracks.push(track);
-        unmappedCount++;
-      }
-    }
-    
-    console.log(`    Summary: ${mappedCount} mapped, ${unmappedCount} unmapped, ${skippedRootCount} root skipped, ${correctedCount} pose-corrected`);
-    
-    if (newTracks.length === 0) {
-      console.error('    ✗ No tracks remained after retargeting!');
-      return null;
-    }
-    
-    newClip.tracks = newTracks;
-    return newClip;
-  }
-  
-  calculateRestPoseOffsets(currentModel, animationData, sampleAnimation, boneMapping) {
-    const offsets = {};
-    
-    // Get rest pose rotations from current model
-    const currentRestPoses = {};
-    currentModel.traverse((bone) => {
-      if (bone.isBone || bone.type === 'Bone') {
-        currentRestPoses[bone.name] = bone.quaternion.clone();
-      }
-    });
-    
-    console.log('  Current model rest poses:', Object.keys(currentRestPoses).length, 'bones');
-    
-    // Extract first frame rotations from animation (represents animation's rest pose)
-    const animRestPoses = {};
-    sampleAnimation.tracks.forEach((track) => {
-      const trackParts = track.name.split('.');
-      const boneName = trackParts.slice(0, -1).join('.');
-      const property = trackParts[trackParts.length - 1];
-      
-      if (property === 'quaternion' && track.values.length >= 4) {
-        // Get first keyframe (rest pose)
-        animRestPoses[boneName] = new THREE.Quaternion(
-          track.values[0],
-          track.values[1],
-          track.values[2],
-          track.values[3]
-        );
-      }
-    });
-    
-    console.log('  Animation rest poses extracted:', Object.keys(animRestPoses).length, 'bones');
-    
-    // Calculate offsets for mapped bones
-    let offsetsCalculated = 0;
-    Object.entries(boneMapping).forEach(([animBone, currentBone]) => {
-      if (currentRestPoses[currentBone] && animRestPoses[animBone]) {
-        // Calculate the rotational difference
-        // offset = currentRest * inverse(animRest)
-        const animRestInverse = animRestPoses[animBone].clone().invert();
-        const offset = currentRestPoses[currentBone].clone().multiply(animRestInverse);
-        
-        offsets[currentBone] = offset;
-        offsetsCalculated++;
-        
-        // Log significant offsets
-        const angle = 2 * Math.acos(Math.min(1, Math.abs(offset.w)));
-        if (angle > 0.1) { // More than ~5.7 degrees
-          console.log(`    Offset for ${currentBone}: ${(angle * 180 / Math.PI).toFixed(1)}°`);
-        }
-      }
-    });
-    
-    console.log(`  Calculated ${offsetsCalculated} rest pose offsets`);
-    
-    return offsets;
-  }
-  
-  applyRestPoseOffset(track, offset, newTrackName) {
-    const TrackType = track.constructor;
-    
-    // Create new values array with offset applied
-    const newValues = new Float32Array(track.values.length);
-    
-    // Apply offset to each quaternion keyframe
-    for (let i = 0; i < track.values.length; i += 4) {
-      const originalQuat = new THREE.Quaternion(
-        track.values[i],
-        track.values[i + 1],
-        track.values[i + 2],
-        track.values[i + 3]
-      );
-      
-      // Apply offset: newQuat = offset * originalQuat
-      const correctedQuat = offset.clone().multiply(originalQuat);
-      
-      newValues[i] = correctedQuat.x;
-      newValues[i + 1] = correctedQuat.y;
-      newValues[i + 2] = correctedQuat.z;
-      newValues[i + 3] = correctedQuat.w;
-    }
-    
-    return new TrackType(newTrackName, track.times, newValues);
   }
 
   /**
