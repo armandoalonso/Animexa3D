@@ -1159,12 +1159,12 @@ export class UIManager {
   buildInlineBoneTrees() {
     const currentModel = this.modelLoader.getCurrentModelData();
     
-    // Build current model tree
-    const currentTreeHtml = this.buildSimpleBoneTree(currentModel.skeletons.boneNames, 'current');
+    // Build current model tree using actual skeleton hierarchy
+    const currentTreeHtml = this.buildBoneTreeFromSkeleton(currentModel, 'current');
     document.getElementById('inline-current-model-tree').innerHTML = currentTreeHtml;
     
-    // Build animation file tree
-    const animTreeHtml = this.buildSimpleBoneTree(this.loadedAnimationData.boneNames, 'anim');
+    // Build animation file tree using actual skeleton hierarchy
+    const animTreeHtml = this.buildBoneTreeFromSkeleton(this.loadedAnimationData, 'anim');
     document.getElementById('inline-animation-file-tree').innerHTML = animTreeHtml;
     
     // Add click handlers
@@ -1174,24 +1174,61 @@ export class UIManager {
     this.updateInlineMappingDisplay();
   }
   
-  buildSimpleBoneTree(boneNames, side) {
-    if (!boneNames || boneNames.length === 0) {
+  buildBoneTreeFromSkeleton(modelData, side) {
+    if (!modelData || !modelData.skeletons || !modelData.skeletons.bones || modelData.skeletons.bones.length === 0) {
       return '<p class="has-text-grey is-size-7">No bones</p>';
     }
     
-    let html = '<div class="bone-tree-simple">';
-    boneNames.forEach(boneName => {
-      const isMapped = side === 'current' ?
-        Object.keys(this.inlineBoneMapping).includes(boneName) :
-        Object.values(this.inlineBoneMapping).includes(boneName);
-      
-      const mappedClass = isMapped ? 'bone-mapped' : '';
-      html += `
-        <div class="bone-item-inline ${mappedClass}" data-bone="${boneName}" data-side="${side}">
-          <span class="bone-name">${boneName}</span>
-        </div>
-      `;
+    const bones = modelData.skeletons.bones;
+    
+    // Find root bones (bones with no parent or parent is not in the bone list)
+    const boneSet = new Set(bones);
+    const rootBones = bones.filter(bone => {
+      return !bone.parent || !boneSet.has(bone.parent) || !bone.parent.isBone;
     });
+    
+    let html = '<div class="bone-tree-hierarchical">';
+    rootBones.forEach((rootBone, index) => {
+      html += this.renderBoneNodeFromObject(rootBone, side, 0, index, boneSet);
+    });
+    html += '</div>';
+    
+    return html;
+  }
+  
+  renderBoneNodeFromObject(boneObject, side, depth, index, boneSet) {
+    const indent = depth * 4;
+    const boneName = boneObject.name;
+    
+    const isMapped = side === 'current' ?
+      Object.keys(this.inlineBoneMapping).includes(boneName) :
+      Object.values(this.inlineBoneMapping).includes(boneName);
+    
+    const mappedClass = isMapped ? 'bone-mapped' : '';
+    
+    // Get children that are bones
+    const childBones = boneObject.children.filter(child => 
+      (child.isBone || child.type === 'Bone') && boneSet.has(child)
+    );
+    
+    const hasChildren = childBones.length > 0;
+    const nodeId = `bone-${side}-${depth}-${index}-${boneName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    
+    let html = `
+      <div class="bone-node" style="padding-left: ${indent}px;">
+        <div class="bone-item-inline ${mappedClass}" data-bone="${boneName}" data-side="${side}">
+          ${hasChildren ? `<span class="bone-toggle" data-target="${nodeId}">\u25bc</span>` : '<span class="bone-spacer"></span>'}
+          <span class="bone-name">${boneName}</span>
+        </div>`;
+    
+    if (hasChildren) {
+      html += `<div class="bone-children" id="${nodeId}">`;
+      childBones.forEach((childBone, childIndex) => {
+        html += this.renderBoneNodeFromObject(childBone, side, depth + 1, childIndex, boneSet);
+      });
+      html += '</div>';
+    }
+    
     html += '</div>';
     
     return html;
@@ -1200,14 +1237,30 @@ export class UIManager {
   addInlineBoneClickHandlers() {
     // Current model bones
     document.querySelectorAll('[data-side="current"]').forEach(item => {
-      item.addEventListener('click', () => {
-        // Clear previous selection
+      item.addEventListener('click', (e) => {
+        // Don't trigger if clicking the toggle
+        if (e.target.classList.contains('bone-toggle')) return;
+        
+        // Clear previous selection on both sides
         document.querySelectorAll('[data-side="current"]').forEach(b => b.classList.remove('selected'));
+        document.querySelectorAll('[data-side="anim"]').forEach(b => b.classList.remove('selected'));
+        
         item.classList.add('selected');
         
         const boneName = item.getAttribute('data-bone');
         this.inlineSelectedCurrentBone = boneName;
         document.getElementById('inline-selected-current-bone').value = boneName;
+        
+        // If this bone is mapped, highlight the corresponding bone on the other side
+        if (this.inlineBoneMapping[boneName]) {
+          const mappedBoneName = this.inlineBoneMapping[boneName];
+          const mappedBone = document.querySelector(`[data-side="anim"][data-bone="${mappedBoneName}"]`);
+          if (mappedBone) {
+            mappedBone.classList.add('selected');
+            // Scroll into view if needed
+            mappedBone.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }
         
         this.updateInlineCreateMappingButton();
       });
@@ -1215,16 +1268,48 @@ export class UIManager {
     
     // Animation file bones
     document.querySelectorAll('[data-side="anim"]').forEach(item => {
-      item.addEventListener('click', () => {
-        // Clear previous selection
+      item.addEventListener('click', (e) => {
+        // Don't trigger if clicking the toggle
+        if (e.target.classList.contains('bone-toggle')) return;
+        
+        // Clear previous selection on both sides
+        document.querySelectorAll('[data-side="current"]').forEach(b => b.classList.remove('selected'));
         document.querySelectorAll('[data-side="anim"]').forEach(b => b.classList.remove('selected'));
+        
         item.classList.add('selected');
         
         const boneName = item.getAttribute('data-bone');
         this.inlineSelectedAnimBone = boneName;
         document.getElementById('inline-selected-anim-bone').value = boneName;
         
+        // If this bone is mapped (find reverse mapping), highlight the corresponding bone on the other side
+        const mappedCurrentBone = Object.keys(this.inlineBoneMapping).find(
+          key => this.inlineBoneMapping[key] === boneName
+        );
+        if (mappedCurrentBone) {
+          const mappedBone = document.querySelector(`[data-side="current"][data-bone="${mappedCurrentBone}"]`);
+          if (mappedBone) {
+            mappedBone.classList.add('selected');
+            // Scroll into view if needed
+            mappedBone.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }
+        
         this.updateInlineCreateMappingButton();
+      });
+    });
+    
+    // Toggle handlers for collapsible sections
+    document.querySelectorAll('.bone-toggle').forEach(toggle => {
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const targetId = toggle.getAttribute('data-target');
+        const childrenContainer = document.getElementById(targetId);
+        
+        if (childrenContainer) {
+          const isCollapsed = childrenContainer.classList.toggle('collapsed');
+          toggle.textContent = isCollapsed ? '▶' : '▼';
+        }
       });
     });
   }

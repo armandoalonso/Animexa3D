@@ -1147,7 +1147,7 @@ html, body {
 
 /* Retargeting Modal Styles */
 .modal-large .modal-card {
-  max-width: 1000px;
+  max-width: 1200px;
   width: 95%;
 }
 
@@ -1381,19 +1381,45 @@ html, body {
 
 /* Inline Retargeting Styles (for Add Animation Modal) */
 .bone-tree-container-small {
-  max-height: 200px;
+  max-height: 300px;
+  min-height: 200px;
   overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid #e0e6ed;
   border-radius: 4px;
   padding: 0.5rem;
   background: #ffffff;
   font-size: 0.8rem;
+  width: 100%;
+}
+
+#inline-bone-trees .columns {
+  display: flex;
+  margin: 0;
+  gap: 1rem;
+}
+
+#inline-bone-trees .column {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
 }
 
 .bone-tree-simple {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.bone-tree-hierarchical {
+  display: flex;
+  flex-direction: column;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.bone-node {
+  display: flex;
+  flex-direction: column;
 }
 
 .bone-item-inline {
@@ -1404,6 +1430,7 @@ html, body {
   font-size: 0.75rem;
   display: flex;
   align-items: center;
+  gap: 0.25rem;
 }
 
 .bone-item-inline:hover {
@@ -1423,6 +1450,47 @@ html, body {
 .bone-item-inline.bone-mapped.selected {
   background: #28a745;
   color: #ffffff;
+}
+
+.bone-toggle {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  cursor: pointer;
+  user-select: none;
+  color: #6c757d;
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.bone-toggle:hover {
+  color: #495057;
+}
+
+.bone-spacer {
+  width: 14px;
+  height: 14px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.bone-children {
+  display: flex;
+  flex-direction: column;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  overflow: hidden;
+}
+
+.bone-children.collapsed {
+  display: none;
+}
+
+.bone-name {
+  user-select: none;
+  word-break: break-word;
 }
 
 .mapping-item-inline {
