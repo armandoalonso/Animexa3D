@@ -834,6 +834,169 @@ html, body {
   gap: 1rem;
 }
 
+/* Retargeting Modal Styles */
+.modal-large .modal-card {
+  max-width: 1000px;
+  width: 95%;
+}
+
+.modal-card-large {
+  max-height: 90vh;
+}
+
+.bone-tree-container {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e0e6ed;
+  border-radius: 4px;
+  padding: 0.5rem;
+  background: #ffffff;
+}
+
+.bone-tree {
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+}
+
+.bone-item {
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 3px;
+  margin: 2px 0;
+  display: flex;
+  align-items: center;
+}
+
+.bone-item:hover {
+  background: #f8f9fa;
+}
+
+.bone-item.selected {
+  background: #3298dc;
+  color: #ffffff;
+}
+
+.bone-item.bone-mapped {
+  background: #d4edda;
+  border-left: 3px solid #28a745;
+}
+
+.bone-item.bone-mapped.selected {
+  background: #28a745;
+  color: #ffffff;
+}
+
+.bone-name {
+  user-select: none;
+}
+
+.retarget-animation-list {
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid #e0e6ed;
+  border-radius: 4px;
+  padding: 0.5rem;
+  background: #ffffff;
+}
+
+.retarget-animation-item {
+  padding: 0.5rem;
+  margin: 0.25rem 0;
+  border: 1px solid #e0e6ed;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+}
+
+.retarget-animation-item:hover {
+  background: #f8f9fa;
+  border-color: #ced4da;
+}
+
+.retarget-animation-item.selected {
+  background: #00d1b2;
+  border-color: #00d1b2;
+  color: #ffffff;
+}
+
+.retarget-animation-item input[type="checkbox"] {
+  margin-right: 0.5rem;
+}
+
+.bone-mapping-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mapping-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border: 1px solid #e0e6ed;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.mapping-item .mapping-arrow {
+  margin: 0 0.5rem;
+  color: #6c757d;
+}
+
+.mapping-item button {
+  margin-left: auto;
+}
+
+.available-mappings-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.mapping-list-item {
+  padding: 0.75rem;
+  margin: 0.5rem 0;
+  border: 1px solid #e0e6ed;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mapping-list-item:hover {
+  background: #f8f9fa;
+  border-color: #ced4da;
+}
+
+.mapping-list-item .mapping-name {
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 0.25rem;
+}
+
+.mapping-list-item .mapping-details {
+  font-size: 0.8rem;
+  color: #6c757d;
+}
+
+.box {
+  background: #f8f9fa;
+  border: 1px solid #e0e6ed;
+  border-radius: 4px;
+  padding: 1rem;
+}
+
+.box p {
+  margin-bottom: 0.5rem;
+}
+
+.box p:last-child {
+  margin-bottom: 0;
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
   .sidebar {

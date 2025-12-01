@@ -5,13 +5,15 @@ import { ModelLoader } from './modules/ModelLoader.js';
 import { AnimationManager } from './modules/AnimationManager.js';
 import { ExportManager } from './modules/ExportManager.js';
 import { UIManager } from './modules/UIManager.js';
+import { RetargetManager } from './modules/RetargetManager.js';
 
 // Initialize managers
 const sceneManager = new SceneManager();
 const modelLoader = new ModelLoader(sceneManager);
 const animationManager = new AnimationManager(sceneManager);
 const exportManager = new ExportManager(sceneManager, animationManager);
-const uiManager = new UIManager(sceneManager, modelLoader, animationManager, exportManager);
+const retargetManager = new RetargetManager(sceneManager, modelLoader, animationManager);
+const uiManager = new UIManager(sceneManager, modelLoader, animationManager, exportManager, retargetManager);
 
 // Start the render loop
 sceneManager.startRenderLoop();
@@ -62,6 +64,9 @@ document.addEventListener('drop', async (e) => {
       animationManager.loadAnimations([]);
       uiManager.showNotification('Model has no animations', 'warning');
     }
+    
+    // Enable retarget button
+    document.getElementById('btn-retarget').disabled = false;
   };
   reader.readAsArrayBuffer(file);
 });

@@ -334,6 +334,178 @@
     </div>
   </div>
 
+  <!-- Retarget Animation Modal -->
+  <div id="retarget-modal" class="modal modal-large">
+    <div class="modal-background"></div>
+    <div class="modal-card modal-card-large">
+      <header class="modal-card-head">
+        <p class="modal-card-title">Animation Retargeting</p>
+        <button class="delete" aria-label="close"></button>
+      </header>
+      <section class="modal-card-body">
+        <!-- Model Selection -->
+        <div class="notification is-info is-light">
+          <p><strong>Instructions:</strong> Load a second model to use as the retarget destination. The current model will be the source.</p>
+        </div>
+        
+        <div class="field">
+          <label class="label">Load Target Model</label>
+          <button id="btn-load-target-model" class="button is-primary">
+            <span class="icon">📂</span>
+            <span>Load Target Model</span>
+          </button>
+        </div>
+
+        <!-- Rig Type Info -->
+        <div class="columns" style="margin-top: 1rem;">
+          <div class="column">
+            <div class="box">
+              <p class="label">Source Model</p>
+              <p><strong>Rig Type:</strong> <span id="source-rig-type">-</span></p>
+              <p><strong>Bones:</strong> <span id="source-bone-count">-</span></p>
+            </div>
+          </div>
+          <div class="column">
+            <div class="box">
+              <p class="label">Target Model</p>
+              <p><strong>Rig Type:</strong> <span id="target-rig-type">-</span></p>
+              <p><strong>Bones:</strong> <span id="target-bone-count">-</span></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bone Mapping Controls -->
+        <div class="field is-grouped" style="margin-top: 1rem;">
+          <div class="control">
+            <button id="btn-auto-map" class="button is-success" disabled>
+              <span class="icon">🤖</span>
+              <span>Auto Map Bones</span>
+            </button>
+          </div>
+          <div class="control">
+            <button id="btn-clear-mapping" class="button is-warning" disabled>
+              <span class="icon">🗑️</span>
+              <span>Clear Mapping</span>
+            </button>
+          </div>
+          <div class="control">
+            <button id="btn-save-mapping" class="button is-info" disabled>
+              <span class="icon">💾</span>
+              <span>Save Mapping</span>
+            </button>
+          </div>
+          <div class="control">
+            <button id="btn-load-mapping" class="button is-info" disabled>
+              <span class="icon">📥</span>
+              <span>Load Mapping</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Mapping Info -->
+        <div id="mapping-info" class="notification is-light" style="margin-top: 1rem; display: none;">
+          <p><strong>Mapped Bones:</strong> <span id="mapped-bone-count">0</span></p>
+          <p><strong>Confidence:</strong> <span id="mapping-confidence">0%</span></p>
+        </div>
+
+        <!-- Bone Trees -->
+        <div class="columns" style="margin-top: 1rem;">
+          <div class="column">
+            <label class="label">Source Skeleton</label>
+            <div id="source-bone-tree" class="bone-tree-container">
+              <p class="has-text-grey">Load a model to see bones</p>
+            </div>
+          </div>
+          <div class="column">
+            <label class="label">Target Skeleton</label>
+            <div id="target-bone-tree" class="bone-tree-container">
+              <p class="has-text-grey">Load target model to see bones</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Manual Mapping Controls -->
+        <div class="box" style="margin-top: 1rem;">
+          <p class="label">Manual Mapping</p>
+          <div class="field is-grouped">
+            <div class="control is-expanded">
+              <input type="text" id="selected-source-bone" class="input" readonly placeholder="Click source bone...">
+            </div>
+            <div class="control">
+              <button id="btn-create-mapping" class="button is-primary" disabled>→</button>
+            </div>
+            <div class="control is-expanded">
+              <input type="text" id="selected-target-bone" class="input" readonly placeholder="Click target bone...">
+            </div>
+          </div>
+        </div>
+
+        <!-- Current Mappings -->
+        <div class="box" style="margin-top: 1rem; max-height: 200px; overflow-y: auto;">
+          <p class="label">Current Bone Mappings</p>
+          <div id="bone-mapping-list">
+            <p class="has-text-grey">No mappings yet</p>
+          </div>
+        </div>
+
+        <!-- Animation Selection -->
+        <div class="field" style="margin-top: 1rem;">
+          <label class="label">Select Animations to Retarget</label>
+          <div id="retarget-animation-list" class="retarget-animation-list">
+            <p class="has-text-grey">No animations available</p>
+          </div>
+        </div>
+      </section>
+      <footer class="modal-card-foot">
+        <button id="btn-apply-retarget" class="button is-success" disabled>Apply Retargeting</button>
+        <button class="button">Close</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Save Mapping Modal -->
+  <div id="save-mapping-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title">Save Bone Mapping</p>
+        <button class="delete" aria-label="close"></button>
+      </header>
+      <section class="modal-card-body">
+        <div class="field">
+          <label class="label">Mapping Name</label>
+          <input type="text" id="mapping-name-input" class="input" placeholder="e.g., Mixamo to UE5">
+        </div>
+      </section>
+      <footer class="modal-card-foot">
+        <button id="btn-confirm-save-mapping" class="button is-success">Save</button>
+        <button class="button">Cancel</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Load Mapping Modal -->
+  <div id="load-mapping-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title">Load Bone Mapping</p>
+        <button class="delete" aria-label="close"></button>
+      </header>
+      <section class="modal-card-body">
+        <div class="field">
+          <label class="label">Available Mappings</label>
+          <div id="available-mappings-list" class="available-mappings-list">
+            <p class="has-text-grey">Loading...</p>
+          </div>
+        </div>
+      </section>
+      <footer class="modal-card-foot">
+        <button class="button">Close</button>
+      </footer>
+    </div>
+  </div>
+
   <script type="module" src="./renderer.js"></script>
 </body>
 </html>
