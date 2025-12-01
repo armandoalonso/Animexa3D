@@ -197,9 +197,8 @@ export class UIManager {
     
     let resolution;
     if (resolutionSelect === 'custom') {
-      const width = parseInt(document.getElementById('export-width').value);
-      const height = parseInt(document.getElementById('export-height').value);
-      resolution = `${width}x${height}`;
+      const size = parseInt(document.getElementById('export-size').value);
+      resolution = `${size}x${size}`;
     } else {
       resolution = resolutionSelect;
     }

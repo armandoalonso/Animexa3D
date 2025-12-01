@@ -46,7 +46,7 @@ export class SceneManager {
     this.scene.add(this.directionalLight);
     
     // Setup grid
-    this.grid = new THREE.GridHelper(20, 20, 0x888888, 0x444444);
+    this.grid = new THREE.GridHelper(100, 100, 0x888888, 0x444444);
     this.scene.add(this.grid);
     this.gridVisible = true;
     
@@ -151,21 +151,45 @@ export class SceneManager {
   addModel(model) {
     this.clearModel();
     this.currentModel = model;
+    
+    // Get bounding box before adding to scene
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    
+    // Scale model if it's too large (normalize to reasonable size)
+    // Assume a character should be around 2 units tall
+    const targetSize = 2;
+    if (maxDim > targetSize * 2) {
+      const scale = targetSize / maxDim;
+      model.scale.set(scale, scale, scale);
+      // Recalculate after scaling
+      box.setFromObject(model);
+      size.copy(box.getSize(new THREE.Vector3()));
+      center.copy(box.getCenter(new THREE.Vector3()));
+    }
+    
     this.scene.add(model);
     
     // Center the model
-    const box = new THREE.Box3().setFromObject(model);
-    const center = box.getCenter(new THREE.Vector3());
     model.position.sub(center);
     
-    // Optionally adjust camera to fit model
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
+    // Adjust grid size based on model
+    const gridSize = Math.max(20, Math.ceil(maxDim * 2));
+    this.scene.remove(this.grid);
+    this.grid = new THREE.GridHelper(gridSize, gridSize, 0x888888, 0x444444);
+    if (this.gridVisible) {
+      this.scene.add(this.grid);
+    }
+    
+    // Adjust camera to fit model
+    const scaledMaxDim = Math.max(size.x, size.y, size.z);
     const fov = this.camera.fov * (Math.PI / 180);
-    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+    let cameraZ = Math.abs(scaledMaxDim / 2 / Math.tan(fov / 2));
     cameraZ *= 1.5; // Add some padding
     
-    this.camera.position.set(0, maxDim * 0.5, cameraZ);
+    this.camera.position.set(0, scaledMaxDim * 0.5, cameraZ);
     this.controls.target.set(0, size.y * 0.5, 0);
     this.controls.update();
   }
