@@ -85,6 +85,8 @@ export class UIManager {
     document.getElementById('btn-create-mapping').addEventListener('click', () => this.handleCreateMapping());
     document.getElementById('btn-apply-retarget').addEventListener('click', () => this.handleApplyRetarget());
     document.getElementById('btn-confirm-save-mapping').addEventListener('click', () => this.handleConfirmSaveMapping());
+    document.getElementById('target-root-bone-select').addEventListener('change', (e) => this.handleTargetRootBoneChange(e));
+    document.getElementById('source-root-bone-select').addEventListener('change', (e) => this.handleSourceRootBoneChange(e));
     
     // Camera preset modal
     document.getElementById('btn-confirm-save-camera-preset').addEventListener('click', () => this.handleConfirmSaveCameraPreset());
@@ -641,6 +643,9 @@ export class UIManager {
       
       // Add click handlers to target bones
       this.addBoneClickHandlers('target');
+      
+      // Populate target root bone dropdown
+      this.populateRootBoneDropdown('target', targetInfo.boneNames, this.retargetManager.targetRootBone);
     }
     
     // Update SOURCE info (uploaded model - on the right)
@@ -654,6 +659,9 @@ export class UIManager {
       
       // Add click handlers to source bones
       this.addBoneClickHandlers('source');
+      
+      // Populate source root bone dropdown
+      this.populateRootBoneDropdown('source', sourceInfo.boneNames, this.retargetManager.sourceRootBone);
     }
     
     // Update animation list from SOURCE model
@@ -845,6 +853,68 @@ export class UIManager {
     document.getElementById('btn-apply-retarget').disabled = false;
   }
   
+  /**
+   * Populate root bone dropdown for a model
+   */
+  populateRootBoneDropdown(side, boneNames, autoDetectedRoot) {
+    const selectId = side === 'target' ? 'target-root-bone-select' : 'source-root-bone-select';
+    const select = document.getElementById(selectId);
+    
+    if (!select) return;
+    
+    // Clear existing options
+    select.innerHTML = '<option value="">Auto-detect...</option>';
+    
+    // Add all bones as options
+    boneNames.forEach(boneName => {
+      const option = document.createElement('option');
+      option.value = boneName;
+      option.textContent = boneName;
+      
+      // Mark the auto-detected root with a note
+      if (boneName === autoDetectedRoot) {
+        option.textContent += ' (auto-detected)';
+      }
+      
+      select.appendChild(option);
+    });
+    
+    // Set to auto-detected value
+    if (autoDetectedRoot) {
+      select.value = autoDetectedRoot;
+    }
+  }
+  
+  /**
+   * Handle target root bone selection change
+   */
+  handleTargetRootBoneChange(event) {
+    const boneName = event.target.value;
+    
+    if (boneName) {
+      this.retargetManager.setTargetRootBone(boneName);
+      this.showNotification(`Target root bone set to: ${boneName}`, 'info', 3000);
+    } else {
+      this.retargetManager.setTargetRootBone(null);
+      this.showNotification('Using auto-detected target root bone', 'info', 3000);
+    }
+  }
+  
+  /**
+   * Handle source root bone selection change
+   */
+  handleSourceRootBoneChange(event) {
+    const boneName = event.target.value;
+    
+    if (boneName) {
+      this.retargetManager.setSourceRootBone(boneName);
+      this.showNotification(`Source root bone set to: ${boneName}`, 'info', 3000);
+    } else {
+      this.retargetManager.setSourceRootBone(null);
+      this.showNotification('Using auto-detected source root bone', 'info', 3000);
+    }
+  }
+  
   updateMappingDisplay() {
     const mapping = this.retargetManager.getBoneMapping();
     const mappingList = document.getElementById('bone-mapping-list');
@@ -979,6 +1049,25 @@ export class UIManager {
       embedTransforms,
       preserveRootMotion
     });
+    
+    // If preserving root motion, ensure root bones are mapped
+    if (preserveRootMotion) {
+      const effectiveSourceRoot = this.retargetManager.getEffectiveSourceRootBone();
+      const effectiveTargetRoot = this.retargetManager.getEffectiveTargetRootBone();
+      
+      if (effectiveSourceRoot && effectiveTargetRoot) {
+        if (!this.retargetManager.boneMapping[effectiveSourceRoot]) {
+          this.retargetManager.boneMapping[effectiveSourceRoot] = effectiveTargetRoot;
+          console.log(`🎯 Added root bone mapping for root motion: ${effectiveSourceRoot} → ${effectiveTargetRoot}`);
+          this.showNotification(`Added root bone mapping: ${effectiveSourceRoot} → ${effectiveTargetRoot}`, 'info', 4000);
+        } else {
+          console.log(`✓ Root bone already mapped: ${effectiveSourceRoot} → ${this.retargetManager.boneMapping[effectiveSourceRoot]}`);
+        }
+      } else {
+        console.warn('⚠️ Root motion enabled but root bones not identified');
+        this.showNotification('Warning: Root bones not identified. Root motion may not work correctly.', 'warning', 5000);
+      }
+    }
     
     // Apply T-pose normalization BEFORE initializing if requested
     if (applyTPose) {

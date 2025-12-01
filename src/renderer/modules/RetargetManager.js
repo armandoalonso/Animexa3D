@@ -39,9 +39,13 @@ export class RetargetManager {
     this.proportionRatio = 1.0;
     this.boneMapIndices = null;
     
-    // Root bone tracking
+    // Root bone tracking (auto-detected)
     this.sourceRootBone = null;
     this.targetRootBone = null;
+    
+    // User-selected root bones (override auto-detection)
+    this.selectedSourceRootBone = null;
+    this.selectedTargetRootBone = null;
   }
   
   /**
@@ -306,10 +310,19 @@ export class RetargetManager {
     this.sourceSkeletonInfo = modelData.skeletons || this.extractSkeletonInfo(modelData.model || modelData);
     this.sourceRigType = this.detectRigType(this.sourceSkeletonInfo.boneNames);
     
-    // Track root bone
+    // Track root bone - detect the functional root (typically Hips/Pelvis)
     if (this.sourceSkeletonInfo.bones && this.sourceSkeletonInfo.bones.length > 0) {
-      const rootBones = this.findRootBones(this.sourceSkeletonInfo.bones);
-      this.sourceRootBone = rootBones.length > 0 ? rootBones[0].name : this.sourceSkeletonInfo.bones[0].name;
+      // Try to find a functional root bone (Hips, Pelvis, etc.)
+      const functionalRootPatterns = /^(.*hips?.*|.*pelvis.*|.*root.*)$/i;
+      const functionalRoot = this.sourceSkeletonInfo.bones.find(bone => functionalRootPatterns.test(bone.name));
+      
+      if (functionalRoot) {
+        this.sourceRootBone = functionalRoot.name;
+      } else {
+        // Fallback to first root bone
+        const rootBones = this.findRootBones(this.sourceSkeletonInfo.bones);
+        this.sourceRootBone = rootBones.length > 0 ? rootBones[0].name : this.sourceSkeletonInfo.bones[0].name;
+      }
     }
     
     console.log('Source model set:', {
@@ -372,10 +385,19 @@ export class RetargetManager {
     this.targetSkeletonInfo = modelData.skeletons;
     this.targetRigType = this.detectRigType(this.targetSkeletonInfo.boneNames);
     
-    // Track root bone
+    // Track root bone - detect the functional root (typically Hips/Pelvis)
     if (this.targetSkeletonInfo.bones && this.targetSkeletonInfo.bones.length > 0) {
-      const rootBones = this.findRootBones(this.targetSkeletonInfo.bones);
-      this.targetRootBone = rootBones.length > 0 ? rootBones[0].name : this.targetSkeletonInfo.bones[0].name;
+      // Try to find a functional root bone (Hips, Pelvis, etc.)
+      const functionalRootPatterns = /^(.*hips?.*|.*pelvis.*|.*root.*)$/i;
+      const functionalRoot = this.targetSkeletonInfo.bones.find(bone => functionalRootPatterns.test(bone.name));
+      
+      if (functionalRoot) {
+        this.targetRootBone = functionalRoot.name;
+      } else {
+        // Fallback to first root bone
+        const rootBones = this.findRootBones(this.targetSkeletonInfo.bones);
+        this.targetRootBone = rootBones.length > 0 ? rootBones[0].name : this.targetSkeletonInfo.bones[0].name;
+      }
     }
     
     console.log('Target model set:', {
@@ -401,6 +423,19 @@ export class RetargetManager {
     
     this.boneMapping = result.mapping;
     this.mappingConfidence = result.confidence;
+    
+    // Ensure root bones are mapped if not already included
+    const effectiveSourceRoot = this.getEffectiveSourceRootBone();
+    const effectiveTargetRoot = this.getEffectiveTargetRootBone();
+    
+    if (effectiveSourceRoot && effectiveTargetRoot) {
+      if (!this.boneMapping[effectiveSourceRoot]) {
+        this.boneMapping[effectiveSourceRoot] = effectiveTargetRoot;
+        console.log(`🎯 Auto-added root bone mapping: ${effectiveSourceRoot} → ${effectiveTargetRoot}`);
+      } else {
+        console.log(`✓ Root bone already mapped: ${effectiveSourceRoot} → ${this.boneMapping[effectiveSourceRoot]}`);
+      }
+    }
     
     const mappedCount = Object.keys(this.boneMapping).length;
     const confidencePercent = Math.round(result.confidence * 100);
@@ -1033,6 +1068,16 @@ export class RetargetManager {
       return null;
     }
     
+    // Check if this is the designated root bone
+    const effectiveSourceRoot = this.getEffectiveSourceRootBone();
+    const isRootBone = effectiveSourceRoot && boneName === effectiveSourceRoot;
+    
+    if (!isRootBone) {
+      // Only retarget position for the designated root bone
+      console.log(`Skipping position track for non-root bone: ${boneName}`);
+      return null;
+    }
+    
     // Check if bone is mapped, or if target has same bone name (fallback)
     let targetBoneName = null;
     if (this.boneMapIndices.idxMap[boneIndex] >= 0) {
@@ -1058,36 +1103,71 @@ export class RetargetManager {
       return null;
     }
     
-    // Get bind poses
-    const srcBindPos = this.srcBindPose.bones[boneIndex].getWorldPosition(new THREE.Vector3());
-    const trgBindPos = this.trgBindPose.bones[targetBoneIndex].getWorldPosition(new THREE.Vector3());
+    console.log(`Retargeting root position: ${boneName} → ${targetBoneName}`);
+    console.log(`  Source values count: ${srcValues.length / 3} keyframes`);
+    console.log(`  Proportion ratio: ${this.proportionRatio.toFixed(3)}`);
     
-    const pos = new THREE.Vector3();
-    const diffPosition = new THREE.Vector3();
+    // Get the bind pose positions to calculate movement deltas
+    const srcBone = this.srcBindPose.bones[boneIndex];
+    const trgBone = this.trgBindPose.bones[targetBoneIndex];
+    
+    // Get the bind pose (rest) positions in local space
+    const srcBindLocalPos = new THREE.Vector3();
+    srcBindLocalPos.copy(srcBone.position);
+    
+    const trgBindLocalPos = new THREE.Vector3();
+    trgBindLocalPos.copy(trgBone.position);
+    
+    console.log(`  Source bind pose position: [${srcBindLocalPos.x.toFixed(3)}, ${srcBindLocalPos.y.toFixed(3)}, ${srcBindLocalPos.z.toFixed(3)}]`);
+    console.log(`  Target bind pose position: [${trgBindLocalPos.x.toFixed(3)}, ${trgBindLocalPos.y.toFixed(3)}, ${trgBindLocalPos.z.toFixed(3)}]`);
+    
+    // Calculate the movement range to verify root motion
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
     
     for (let i = 0; i < srcValues.length; i += 3) {
-      pos.set(srcValues[i], srcValues[i + 1], srcValues[i + 2]);
-      
-      // Apply embedded transforms if needed
-      if (this.srcBindPose.transformsWorldEmbedded) {
-        pos.applyQuaternion(this.srcBindPose.transformsWorldEmbedded.forward.q);
-      }
-      
-      diffPosition.subVectors(pos, srcBindPos);
-      
-      // Scale the position by proportion ratio
-      diffPosition.multiplyScalar(this.proportionRatio);
-      
-      if (this.trgBindPose.transformsWorldEmbedded) {
-        diffPosition.applyQuaternion(this.trgBindPose.transformsWorldEmbedded.inverse.q);
-      }
-      
-      diffPosition.add(trgBindPos);
-      
-      trgValues[i] = diffPosition.x;
-      trgValues[i + 1] = diffPosition.y;
-      trgValues[i + 2] = diffPosition.z;
+      minX = Math.min(minX, srcValues[i]);
+      maxX = Math.max(maxX, srcValues[i]);
+      minY = Math.min(minY, srcValues[i + 1]);
+      maxY = Math.max(maxY, srcValues[i + 1]);
+      minZ = Math.min(minZ, srcValues[i + 2]);
+      maxZ = Math.max(maxZ, srcValues[i + 2]);
     }
+    
+    console.log(`  Source position range: X[${minX.toFixed(3)} to ${maxX.toFixed(3)}] Y[${minY.toFixed(3)} to ${maxY.toFixed(3)}] Z[${minZ.toFixed(3)} to ${maxZ.toFixed(3)}]`);
+    console.log(`  Source movement: ΔX=${(maxX-minX).toFixed(3)}, ΔY=${(maxY-minY).toFixed(3)}, ΔZ=${(maxZ-minZ).toFixed(3)}`);
+    
+    // Transfer the animation as RELATIVE movement from bind pose
+    // This prevents offset issues when the source and target have different rest positions
+    for (let i = 0; i < srcValues.length; i += 3) {
+      // Get the animated position from source
+      const animPos = new THREE.Vector3(
+        srcValues[i],
+        srcValues[i + 1],
+        srcValues[i + 2]
+      );
+      
+      // Calculate the movement delta from source bind pose
+      const movementDelta = new THREE.Vector3();
+      movementDelta.subVectors(animPos, srcBindLocalPos);
+      
+      // Scale the movement by proportion ratio
+      movementDelta.multiplyScalar(this.proportionRatio);
+      
+      // Apply the movement to target bind pose
+      const targetPos = new THREE.Vector3();
+      targetPos.addVectors(trgBindLocalPos, movementDelta);
+      
+      // Store in target values
+      trgValues[i] = targetPos.x;
+      trgValues[i + 1] = targetPos.y;
+      trgValues[i + 2] = targetPos.z;
+    }
+    
+    console.log(`  ✓ Root position track retargeted: ${srcValues.length / 3} keyframes`);
+    console.log(`  First keyframe - Source: [${srcValues[0].toFixed(3)}, ${srcValues[1].toFixed(3)}, ${srcValues[2].toFixed(3)}]`);
+    console.log(`  First keyframe - Target: [${trgValues[0].toFixed(3)}, ${trgValues[1].toFixed(3)}, ${trgValues[2].toFixed(3)}]`);
     
     return new THREE.VectorKeyframeTrack(
       targetBoneName + '.position',
@@ -1190,10 +1270,12 @@ export class RetargetManager {
       const trgTracks = [];
       const srcTracks = sourceClip.tracks;
       
-      // Identify root bone patterns
-      const rootBonePatterns = /^(hips?|pelvis|root|spine_?0?0?1?|mixamorig:hips)$/i;
+      // Get the effective root bones (user-selected or auto-detected)
+      const effectiveSourceRoot = this.getEffectiveSourceRootBone();
+      const effectiveTargetRoot = this.getEffectiveTargetRootBone();
       
       console.log('📊 Processing', srcTracks.length, 'animation tracks');
+      console.log('Root bones - Source:', effectiveSourceRoot, 'Target:', effectiveTargetRoot);
       let skippedCount = 0;
       let retargetedCount = 0;
       let rootTracksCount = 0;
@@ -1207,8 +1289,8 @@ export class RetargetManager {
         const boneName = trackParts.slice(0, -1).join('.');
         const property = trackParts[trackParts.length - 1];
         
-        // Check if this is a root bone
-        const isRootBone = rootBonePatterns.test(boneName);
+        // Check if this is the designated root bone
+        const isRootBone = effectiveSourceRoot && boneName === effectiveSourceRoot;
         const isPositionTrack = property === 'position';
         
         // Check track type and retarget accordingly
@@ -1252,6 +1334,26 @@ export class RetargetManager {
         console.error('❌ No tracks were successfully retargeted!');
         window.uiManager.showNotification('No tracks were retargeted', 'warning');
         return null;
+      }
+      
+      // IMPORTANT: For root motion to work properly, we need to ensure the position animation
+      // is applied to the model's root object, not just the bone
+      // Three.js AnimationMixer applies tracks based on the object hierarchy from the mixer's root
+      if (preserveRootMotion && rootTracksCount > 0) {
+        console.log('🚶 Root motion enabled - Position tracks will animate the character through space');
+        console.log('   Make sure the AnimationMixer is created on the model root object');
+        
+        // Log the target bone tracks for debugging
+        const positionTracks = trgTracks.filter(t => t.name.endsWith('.position'));
+        positionTracks.forEach(track => {
+          console.log(`   Position track: ${track.name} with ${track.times.length} keyframes`);
+          if (track.values.length >= 6) {
+            console.log(`   First position: [${track.values[0].toFixed(3)}, ${track.values[1].toFixed(3)}, ${track.values[2].toFixed(3)}]`);
+            console.log(`   Last position: [${track.values[track.values.length-3].toFixed(3)}, ${track.values[track.values.length-2].toFixed(3)}, ${track.values[track.values.length-1].toFixed(3)}]`);
+          }
+        });
+      } else if (!preserveRootMotion) {
+        console.log('⚓ Root motion disabled - Character will animate in place');
       }
       
       const retargetedClip = new THREE.AnimationClip(
@@ -1657,6 +1759,40 @@ export class RetargetManager {
     );
     
     return retargetedClips;
+  }
+  
+  /**
+   * Set custom root bone for source model
+   * @param {string} boneName - Bone name
+   */
+  setSourceRootBone(boneName) {
+    this.selectedSourceRootBone = boneName;
+    console.log('Source root bone set to:', boneName);
+  }
+  
+  /**
+   * Set custom root bone for target model
+   * @param {string} boneName - Bone name
+   */
+  setTargetRootBone(boneName) {
+    this.selectedTargetRootBone = boneName;
+    console.log('Target root bone set to:', boneName);
+  }
+  
+  /**
+   * Get the effective source root bone (user-selected or auto-detected)
+   * @returns {string|null}
+   */
+  getEffectiveSourceRootBone() {
+    return this.selectedSourceRootBone || this.sourceRootBone;
+  }
+  
+  /**
+   * Get the effective target root bone (user-selected or auto-detected)
+   * @returns {string|null}
+   */
+  getEffectiveTargetRootBone() {
+    return this.selectedTargetRootBone || this.targetRootBone;
   }
   
   /**

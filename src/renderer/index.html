@@ -445,6 +445,31 @@
           </div>
         </div>
 
+        <!-- Root Bone Selection -->
+        <div class="box" style="margin-top: 1rem;">
+          <p class="label">Root Bone Selection</p>
+          <p class="help">Select the root bone for each rig. This is used for root motion preservation (walk cycles, locomotion, etc.)</p>
+          
+          <div class="columns">
+            <div class="column">
+              <label class="label is-small">Target Model Root Bone</label>
+              <div class="select is-fullwidth">
+                <select id="target-root-bone-select">
+                  <option value="">Auto-detect...</option>
+                </select>
+              </div>
+            </div>
+            <div class="column">
+              <label class="label is-small">Source Model Root Bone</label>
+              <div class="select is-fullwidth">
+                <select id="source-root-bone-select">
+                  <option value="">Auto-detect...</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Bone Mapping Controls -->
         <div class="field is-grouped" style="margin-top: 1rem;">
           <div class="control">

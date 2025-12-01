@@ -90,6 +90,20 @@ export class AnimationManager {
     // Get the clip
     const clip = this.animations[index];
     
+    console.log(`🎬 Playing animation: ${clip.name}`);
+    console.log(`   Tracks: ${clip.tracks.length}`);
+    
+    // Log position tracks for root motion debugging
+    const positionTracks = clip.tracks.filter(t => t.name.endsWith('.position'));
+    if (positionTracks.length > 0) {
+      console.log(`   📍 Position tracks found: ${positionTracks.length}`);
+      positionTracks.forEach(track => {
+        console.log(`      - ${track.name} (${track.times.length} keyframes)`);
+      });
+    } else {
+      console.log('   ⚠️ No position tracks - animation will play in place');
+    }
+    
     // Create and play action
     this.currentAction = mixer.clipAction(clip);
     this.currentAction.setLoop(
