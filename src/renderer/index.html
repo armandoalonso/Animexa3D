@@ -185,6 +185,40 @@
             <input type="checkbox" id="grid-toggle" checked> Show Grid
           </label>
         </div>
+        
+        <div class="control-section">
+          <label class="label">Model Rotation Fix</label>
+          <p class="help" style="margin-bottom: 0.5rem;">Fix coordinate system differences (e.g., Unreal Engine imports)</p>
+          <div class="field is-grouped" style="margin-bottom: 0.25rem;">
+            <p class="control is-expanded">
+              <button id="btn-rotate-x-90" class="button is-small is-fullwidth">X +90°</button>
+            </p>
+            <p class="control is-expanded">
+              <button id="btn-rotate-x-minus-90" class="button is-small is-fullwidth">X -90°</button>
+            </p>
+          </div>
+          <div class="field is-grouped" style="margin-bottom: 0.25rem;">
+            <p class="control is-expanded">
+              <button id="btn-rotate-y-90" class="button is-small is-fullwidth">Y +90°</button>
+            </p>
+            <p class="control is-expanded">
+              <button id="btn-rotate-y-minus-90" class="button is-small is-fullwidth">Y -90°</button>
+            </p>
+          </div>
+          <div class="field is-grouped" style="margin-bottom: 0.25rem;">
+            <p class="control is-expanded">
+              <button id="btn-rotate-z-90" class="button is-small is-fullwidth">Z +90°</button>
+            </p>
+            <p class="control is-expanded">
+              <button id="btn-rotate-z-minus-90" class="button is-small is-fullwidth">Z -90°</button>
+            </p>
+          </div>
+          <div class="field">
+            <button id="btn-reset-rotation" class="button is-small is-fullwidth is-warning">
+              Reset Rotation
+            </button>
+          </div>
+        </div>
 
         <div class="control-section">
           <label class="label">Light Position</label>

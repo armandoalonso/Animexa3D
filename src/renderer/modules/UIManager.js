@@ -47,6 +47,15 @@ export class UIManager {
     document.getElementById('camera-preset').addEventListener('change', (e) => this.handleCameraPreset(e));
     document.getElementById('grid-toggle').addEventListener('change', (e) => this.handleGridToggle(e));
     
+    // Model rotation controls
+    document.getElementById('btn-rotate-x-90').addEventListener('click', () => this.sceneManager.rotateModel('x', 90));
+    document.getElementById('btn-rotate-x-minus-90').addEventListener('click', () => this.sceneManager.rotateModel('x', -90));
+    document.getElementById('btn-rotate-y-90').addEventListener('click', () => this.sceneManager.rotateModel('y', 90));
+    document.getElementById('btn-rotate-y-minus-90').addEventListener('click', () => this.sceneManager.rotateModel('y', -90));
+    document.getElementById('btn-rotate-z-90').addEventListener('click', () => this.sceneManager.rotateModel('z', 90));
+    document.getElementById('btn-rotate-z-minus-90').addEventListener('click', () => this.sceneManager.rotateModel('z', -90));
+    document.getElementById('btn-reset-rotation').addEventListener('click', () => this.sceneManager.resetModelRotation());
+    
     // Custom camera preset controls
     document.getElementById('btn-save-camera-view').addEventListener('click', () => this.handleSaveCameraView());
     document.getElementById('custom-camera-preset').addEventListener('change', (e) => this.handleLoadCustomPreset(e));

@@ -311,4 +311,53 @@ export class SceneManager {
     // Reset clock
     this.clock = new THREE.Clock();
   }
+  
+  /**
+   * Rotate the current model around a specific axis
+   * @param {string} axis - 'x', 'y', or 'z'
+   * @param {number} degrees - rotation amount in degrees
+   */
+  rotateModel(axis, degrees) {
+    if (!this.currentModel) {
+      console.warn('No model loaded to rotate');
+      return;
+    }
+    
+    const radians = degrees * (Math.PI / 180);
+    
+    switch(axis.toLowerCase()) {
+      case 'x':
+        this.currentModel.rotateX(radians);
+        break;
+      case 'y':
+        this.currentModel.rotateY(radians);
+        break;
+      case 'z':
+        this.currentModel.rotateZ(radians);
+        break;
+      default:
+        console.warn('Invalid axis:', axis);
+        return;
+    }
+    
+    console.log(`Rotated model ${degrees}° around ${axis.toUpperCase()} axis`);
+    console.log('Current rotation:', {
+      x: this.currentModel.rotation.x * (180 / Math.PI),
+      y: this.currentModel.rotation.y * (180 / Math.PI),
+      z: this.currentModel.rotation.z * (180 / Math.PI)
+    });
+  }
+  
+  /**
+   * Reset model rotation to zero
+   */
+  resetModelRotation() {
+    if (!this.currentModel) {
+      console.warn('No model loaded to reset rotation');
+      return;
+    }
+    
+    this.currentModel.rotation.set(0, 0, 0);
+    console.log('Model rotation reset to zero');
+  }
 }
