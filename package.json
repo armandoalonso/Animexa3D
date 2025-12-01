@@ -1,0 +1,33 @@
+{
+  "name": "3d-animation-viewer",
+  "version": "1.0.0",
+  "description": "Desktop 3D Animation Viewer with animation retargeting and frame export",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron .",
+    "package": "electron-builder"
+  },
+  "keywords": [
+    "electron",
+    "three.js",
+    "3d",
+    "animation",
+    "viewer",
+    "retargeting"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "electron": "^28.0.0",
+    "three": "^0.160.0",
+    "bulma": "^0.9.4"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "electron-vite": "^2.0.0",
+    "electron-builder": "^24.9.0"
+  }
+}

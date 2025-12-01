@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Animation Viewer</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <!-- Drop Zone Overlay (hidden by default) -->
+  <div id="drop-overlay" class="drop-overlay">
+    <div class="drop-content">
+      <p class="title is-3">Drop 3D Model Here</p>
+      <p class="subtitle">Supported formats: GLB, GLTF, FBX</p>
+    </div>
+  </div>
+
+  <!-- Notification Container -->
+  <div id="notification-container" class="notification-container"></div>
+
+  <!-- Main Layout -->
+  <div class="app-container">
+    <!-- Top Toolbar -->
+    <nav class="navbar is-dark" role="navigation">
+      <div class="navbar-brand">
+        <span class="navbar-item">
+          <strong>3D Animation Viewer</strong>
+        </span>
+      </div>
+      <div class="navbar-menu">
+        <div class="navbar-start">
+          <div class="navbar-item">
+            <div class="buttons">
+              <button id="btn-open-model" class="button is-primary">
+                <span class="icon"><span>📂</span></span>
+                <span>Open Model</span>
+              </button>
+              <button id="btn-export" class="button is-success" disabled>
+                <span class="icon"><span>💾</span></span>
+                <span>Export Frames</span>
+              </button>
+              <button id="btn-retarget" class="button is-info" disabled>
+                <span class="icon"><span>🔄</span></span>
+                <span>Retarget Animation</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <div class="main-content">
+      <!-- Left Sidebar: Animation List -->
+      <aside class="sidebar sidebar-left">
+        <div class="sidebar-header">
+          <p class="title is-6">Animations</p>
+        </div>
+        <div id="animation-list" class="animation-list">
+          <div class="empty-state">
+            <p class="has-text-grey">No model loaded</p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center: 3D Viewport -->
+      <div class="viewport-container">
+        <canvas id="webgl-canvas"></canvas>
+        <div id="empty-state" class="empty-state-overlay">
+          <div class="empty-state-content">
+            <p class="title is-4">Drop a 3D model here</p>
+            <p class="subtitle is-6">or click "Open Model" to browse</p>
+            <p class="has-text-grey">Supported formats: GLB, GLTF, FBX</p>
+          </div>
+        </div>
+        <div id="loading-overlay" class="loading-overlay" style="display: none;">
+          <div class="loading-content">
+            <div class="loader"></div>
+            <p class="loading-text">Loading model...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Sidebar: Scene Controls -->
+      <aside class="sidebar sidebar-right">
+        <div class="sidebar-header">
+          <p class="title is-6">Scene Controls</p>
+        </div>
+        <div class="control-section">
+          <label class="label">Background Color</label>
+          <div class="field has-addons">
+            <div class="control">
+              <input type="color" id="bg-color" class="input" value="#2c3e50">
+            </div>
+            <div class="control is-expanded">
+              <input type="text" id="bg-color-hex" class="input" value="#2c3e50">
+            </div>
+          </div>
+        </div>
+
+        <div class="control-section">
+          <label class="label">Camera Preset</label>
+          <div class="select is-fullwidth">
+            <select id="camera-preset">
+              <option value="perspective">Perspective</option>
+              <option value="front">Front View</option>
+              <option value="back">Back View</option>
+              <option value="left">Left View</option>
+              <option value="right">Right View</option>
+              <option value="top">Top View</option>
+              <option value="bottom">Bottom View</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="control-section">
+          <label class="label">
+            <input type="checkbox" id="grid-toggle" checked> Show Grid
+          </label>
+        </div>
+
+        <div class="control-section">
+          <label class="label">Light Position</label>
+          <div class="field">
+            <label class="label is-small">X: <span id="light-x-value">5</span></label>
+            <input type="range" id="light-x" class="slider" min="-20" max="20" step="0.5" value="5">
+          </div>
+          <div class="field">
+            <label class="label is-small">Y: <span id="light-y-value">10</span></label>
+            <input type="range" id="light-y" class="slider" min="-20" max="20" step="0.5" value="10">
+          </div>
+          <div class="field">
+            <label class="label is-small">Z: <span id="light-z-value">7.5</span></label>
+            <input type="range" id="light-z" class="slider" min="-20" max="20" step="0.5" value="7.5">
+          </div>
+        </div>
+
+        <div class="control-section">
+          <label class="label">Light Intensity</label>
+          <div class="field">
+            <label class="label is-small">Directional: <span id="dir-light-value">0.8</span></label>
+            <input type="range" id="dir-light-intensity" class="slider" min="0" max="2" step="0.1" value="0.8">
+          </div>
+          <div class="field">
+            <label class="label is-small">Ambient: <span id="amb-light-value">0.4</span></label>
+            <input type="range" id="amb-light-intensity" class="slider" min="0" max="1" step="0.1" value="0.4">
+          </div>
+        </div>
+
+        <div id="model-info" class="control-section" style="display: none;">
+          <label class="label">Model Info</label>
+          <div class="model-info-content">
+            <p><strong>Name:</strong> <span id="info-name">-</span></p>
+            <p><strong>Polygons:</strong> <span id="info-polygons">-</span></p>
+            <p><strong>Animations:</strong> <span id="info-animations">-</span></p>
+            <p><strong>Bones:</strong> <span id="info-bones">-</span></p>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Bottom Timeline Panel -->
+    <div class="timeline-panel">
+      <div class="timeline-controls">
+        <button id="btn-play" class="button is-small" disabled>
+          <span class="icon">▶️</span>
+        </button>
+        <button id="btn-pause" class="button is-small" disabled>
+          <span class="icon">⏸️</span>
+        </button>
+        <button id="btn-stop" class="button is-small" disabled>
+          <span class="icon">⏹️</span>
+        </button>
+        <label class="checkbox ml-3">
+          <input type="checkbox" id="loop-toggle"> Loop
+        </label>
+        <span class="timeline-time ml-3">
+          <span id="current-time">00:00:00</span> / <span id="total-time">00:00:00</span>
+        </span>
+      </div>
+      <div class="timeline-scrubber">
+        <input type="range" id="time-slider" class="slider is-fullwidth" min="0" max="1" step="0.001" value="0" disabled>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Modal -->
+  <div id="export-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title">Export Animation Frames</p>
+        <button class="delete" aria-label="close"></button>
+      </header>
+      <section class="modal-card-body">
+        <div class="field">
+          <label class="label">Resolution</label>
+          <div class="select is-fullwidth">
+            <select id="export-resolution">
+              <option value="1920x1080">1920x1080 (Full HD)</option>
+              <option value="1280x720">1280x720 (HD)</option>
+              <option value="3840x2160">3840x2160 (4K)</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+        </div>
+        <div id="custom-resolution" class="field" style="display: none;">
+          <div class="field-body">
+            <div class="field">
+              <label class="label">Width</label>
+              <input type="number" id="export-width" class="input" value="1920" min="1">
+            </div>
+            <div class="field">
+              <label class="label">Height</label>
+              <input type="number" id="export-height" class="input" value="1080" min="1">
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="label">Frame Rate (FPS)</label>
+          <div class="select is-fullwidth">
+            <select id="export-fps">
+              <option value="24">24 FPS</option>
+              <option value="30" selected>30 FPS</option>
+              <option value="60">60 FPS</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+        </div>
+        <div id="custom-fps" class="field" style="display: none;">
+          <label class="label">Custom FPS</label>
+          <input type="number" id="export-fps-custom" class="input" value="30" min="1" max="120">
+        </div>
+        <div class="field">
+          <label class="label">Output Folder</label>
+          <div class="field has-addons">
+            <div class="control is-expanded">
+              <input type="text" id="export-folder" class="input" readonly placeholder="Choose folder...">
+            </div>
+            <div class="control">
+              <button id="btn-choose-folder" class="button is-info">Browse</button>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="checkbox">
+            <input type="checkbox" id="transparent-bg-toggle">
+            Transparent Background
+          </label>
+          <p class="help">Export with alpha channel (transparent background)</p>
+        </div>
+        <div class="notification is-info is-light">
+          <p><strong>Frame naming:</strong> frame_001.png, frame_002.png, ...</p>
+        </div>
+      </section>
+      <footer class="modal-card-foot">
+        <button id="btn-start-export" class="button is-success" disabled>Start Export</button>
+        <button class="button">Cancel</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Export Progress Modal -->
+  <div id="progress-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title">Exporting Frames</p>
+      </header>
+      <section class="modal-card-body">
+        <p id="progress-text">Exporting frame 0 of 0...</p>
+        <progress id="progress-bar" class="progress is-success" value="0" max="100">0%</progress>
+        <p id="progress-eta" class="has-text-grey">Estimating time remaining...</p>
+      </section>
+      <footer class="modal-card-foot">
+        <button id="btn-cancel-export" class="button is-danger">Cancel</button>
+      </footer>
+    </div>
+  </div>
+
+  <script type="module" src="./renderer.js"></script>
+</body>
+</html>

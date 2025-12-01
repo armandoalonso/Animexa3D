@@ -1,0 +1,299 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Navbar */
+.navbar {
+  flex-shrink: 0;
+}
+
+/* Main Content */
+.main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Sidebars */
+.sidebar {
+  width: 300px;
+  background: #f5f5f5;
+  border: 1px solid #dbdbdb;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.sidebar-left {
+  border-right: 2px solid #dbdbdb;
+}
+
+.sidebar-right {
+  border-left: 2px solid #dbdbdb;
+}
+
+.sidebar-header {
+  padding: 1rem;
+  border-bottom: 1px solid #dbdbdb;
+  background: #fff;
+}
+
+.sidebar-header .title {
+  margin: 0;
+}
+
+/* Animation List */
+.animation-list {
+  flex: 1;
+  padding: 0.5rem;
+}
+
+.animation-list .empty-state {
+  padding: 2rem;
+  text-align: center;
+}
+
+.animation-item {
+  margin-bottom: 0.5rem;
+}
+
+.animation-item.is-active {
+  background: #3273dc;
+  color: white;
+}
+
+/* Viewport */
+.viewport-container {
+  flex: 1;
+  position: relative;
+  background: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#webgl-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Empty State Overlay */
+.empty-state-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 26, 26, 0.9);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.empty-state-overlay.hidden {
+  display: none;
+}
+
+.empty-state-content {
+  text-align: center;
+  color: #dbdbdb;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.loading-content {
+  text-align: center;
+  color: white;
+}
+
+.loader {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #3273dc;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: 1.2rem;
+}
+
+/* Drop Overlay */
+.drop-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(50, 115, 220, 0.9);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.drop-overlay.active {
+  display: flex;
+}
+
+.drop-content {
+  text-align: center;
+  color: white;
+  border: 4px dashed white;
+  padding: 3rem;
+  border-radius: 10px;
+}
+
+/* Notification Container */
+.notification-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 9999;
+  max-width: 400px;
+}
+
+.notification-container .notification {
+  margin-bottom: 0.5rem;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Scene Controls */
+.control-section {
+  padding: 1rem;
+  border-bottom: 1px solid #dbdbdb;
+}
+
+.control-section:last-child {
+  border-bottom: none;
+}
+
+.slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: #dbdbdb;
+  outline: none;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #3273dc;
+  cursor: pointer;
+}
+
+.slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #3273dc;
+  cursor: pointer;
+  border: none;
+}
+
+.model-info-content p {
+  margin-bottom: 0.25rem;
+  font-size: 0.875rem;
+}
+
+/* Timeline Panel */
+.timeline-panel {
+  flex-shrink: 0;
+  background: #f5f5f5;
+  border-top: 2px solid #dbdbdb;
+  padding: 0.75rem 1rem;
+}
+
+.timeline-controls {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.timeline-time {
+  font-family: 'Courier New', monospace;
+  font-size: 0.875rem;
+}
+
+.timeline-scrubber {
+  position: relative;
+}
+
+/* Modal Customizations */
+.modal-card {
+  max-width: 600px;
+}
+
+#custom-resolution .field-body {
+  display: flex;
+  gap: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .sidebar {
+    width: 250px;
+  }
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    width: 200px;
+  }
+}
