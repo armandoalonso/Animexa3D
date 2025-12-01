@@ -172,8 +172,12 @@ export class SceneManager {
     
     this.scene.add(model);
     
-    // Center the model
-    model.position.sub(center);
+    // Position model so its bottom sits on the grid (y=0)
+    // First center horizontally (X and Z)
+    model.position.x = -center.x;
+    model.position.z = -center.z;
+    // Then position bottom at grid level
+    model.position.y = -box.min.y;
     
     // Adjust grid size based on model
     const gridSize = Math.max(20, Math.ceil(maxDim * 2));
