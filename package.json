@@ -1,7 +1,7 @@
 {
-  "name": "3d-animation-viewer",
+  "name": "animexa",
   "version": "1.0.0",
-  "description": "Desktop 3D Animation Viewer with animation retargeting and frame export",
+  "description": "Animexa - Desktop 3D Animation Viewer with animation retargeting and frame export",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -20,14 +20,41 @@
   ],
   "author": "",
   "license": "MIT",
+  "build": {
+    "appId": "com.animexa.app",
+    "productName": "Animexa",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "icon256.png",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "mac": {
+      "icon": "icon512.png",
+      "category": "public.app-category.graphics-design"
+    },
+    "linux": {
+      "icon": "icon512.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Graphics"
+    }
+  },
   "dependencies": {
+    "adm-zip": "^0.5.16",
+    "bulma": "^0.9.4",
     "electron": "^28.0.0",
-    "three": "^0.160.0",
-    "bulma": "^0.9.4"
+    "three": "^0.160.0"
   },
   "devDependencies": {
-    "vite": "^5.0.0",
+    "electron-builder": "^24.9.0",
     "electron-vite": "^2.0.0",
-    "electron-builder": "^24.9.0"
+    "vite": "^5.0.0"
   }
 }

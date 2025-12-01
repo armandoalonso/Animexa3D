@@ -7,6 +7,7 @@ import { ExportManager } from './modules/ExportManager.js';
 import { UIManager } from './modules/UIManager.js';
 import { RetargetManager } from './modules/RetargetManager.js';
 import { TextureManager } from './modules/TextureManager.js';
+import { ProjectManager } from './modules/ProjectManager.js';
 
 // Initialize managers
 const sceneManager = new SceneManager();
@@ -15,7 +16,8 @@ const animationManager = new AnimationManager(sceneManager);
 const exportManager = new ExportManager(sceneManager, animationManager);
 const retargetManager = new RetargetManager(sceneManager, modelLoader, animationManager);
 const textureManager = new TextureManager();
-const uiManager = new UIManager(sceneManager, modelLoader, animationManager, exportManager, retargetManager, textureManager);
+const projectManager = new ProjectManager(sceneManager, modelLoader, animationManager, textureManager);
+const uiManager = new UIManager(sceneManager, modelLoader, animationManager, exportManager, retargetManager, textureManager, projectManager);
 
 // Start the render loop
 sceneManager.startRenderLoop();
@@ -78,8 +80,143 @@ viewportContainer.addEventListener('drop', async (e) => {
   const file = files[0];
   const extension = file.name.split('.').pop().toLowerCase();
 
+  // Check if it's a project file
+  if (extension === '3dproj') {
+    const loadingOverlay = document.getElementById('loading-overlay');
+    
+    try {
+      // Show loading overlay
+      loadingOverlay.classList.add('active');
+      
+      // Save the dropped file to a temp location and load it as a project
+      const arrayBuffer = await file.arrayBuffer();
+      const tempPath = await window.electronAPI.saveDroppedProject(Array.from(new Uint8Array(arrayBuffer)), file.name);
+      
+      // Load the project using the project manager
+      const result = await window.electronAPI.loadProject(tempPath);
+      
+      if (result.success) {
+        const projectData = result.data;
+        const extractedPath = result.extractedPath;
+
+        // Load the model
+        if (projectData.model && projectData.model.fileName) {
+          const modelPath = `${extractedPath}/${projectData.model.fileName}`;
+          const modelBuffer = await window.electronAPI.readFileAsBuffer(modelPath);
+          const modelExtension = projectData.model.extension;
+          
+          const modelData = await modelLoader.loadFromBuffer(
+            modelBuffer,
+            modelExtension,
+            projectData.model.fileName
+          );
+
+          // Load animations
+          if (projectData.animations && projectData.animations.length > 0) {
+            animationManager.loadAnimations(modelData.animations || []);
+          } else {
+            animationManager.loadAnimations([]);
+          }
+
+          // Load textures
+          if (projectData.materials && projectData.materials.length > 0) {
+            const materials = textureManager.extractMaterials(modelData.model);
+            
+            for (const savedMaterial of projectData.materials) {
+              for (const savedTexture of savedMaterial.textures) {
+                if (savedTexture.fileName) {
+                  const material = materials.find(m => m.name === savedMaterial.name);
+                  
+                  if (material) {
+                    try {
+                      const texturePath = `${extractedPath}/textures/${savedTexture.fileName}`;
+                      await textureManager.updateTexture(
+                        material.uuid,
+                        savedTexture.key,
+                        texturePath
+                      );
+                    } catch (error) {
+                      console.warn(`Failed to load texture ${savedTexture.fileName}:`, error);
+                    }
+                  }
+                }
+              }
+            }
+            
+            await uiManager.displayTextures();
+            
+            // Wait for render cycle to complete
+            await new Promise(resolve => requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                setTimeout(resolve, 300);
+              });
+            }));
+          }
+
+          // Restore scene settings
+          if (projectData.scene) {
+            if (projectData.scene.backgroundColor) {
+              sceneManager.setBackgroundColor(projectData.scene.backgroundColor);
+              document.getElementById('bg-color').value = projectData.scene.backgroundColor;
+            }
+            
+            if (typeof projectData.scene.gridVisible !== 'undefined') {
+              sceneManager.toggleGrid(projectData.scene.gridVisible);
+              document.getElementById('grid-toggle').checked = projectData.scene.gridVisible;
+            }
+            
+            if (projectData.scene.camera) {
+              const cam = projectData.scene.camera;
+              sceneManager.camera.position.set(cam.position.x, cam.position.y, cam.position.z);
+              sceneManager.controls.target.set(cam.target.x, cam.target.y, cam.target.z);
+              sceneManager.controls.update();
+            }
+            
+            if (projectData.scene.lighting) {
+              const lighting = projectData.scene.lighting;
+              
+              sceneManager.updateAmbientLightIntensity(lighting.ambientIntensity);
+              document.getElementById('amb-light-intensity').value = lighting.ambientIntensity;
+              document.getElementById('amb-light-value').textContent = lighting.ambientIntensity;
+              
+              sceneManager.updateDirectionalLightIntensity(lighting.directionalIntensity);
+              document.getElementById('dir-light-intensity').value = lighting.directionalIntensity;
+              document.getElementById('dir-light-value').textContent = lighting.directionalIntensity;
+              
+              const pos = lighting.directionalPosition;
+              sceneManager.updateLightPosition(pos.x, pos.y, pos.z);
+              document.getElementById('light-x').value = pos.x;
+              document.getElementById('light-y').value = pos.y;
+              document.getElementById('light-z').value = pos.z;
+              document.getElementById('light-x-value').textContent = pos.x;
+              document.getElementById('light-y-value').textContent = pos.y;
+              document.getElementById('light-z-value').textContent = pos.z;
+            }
+          }
+
+          // Enable buttons
+          document.getElementById('btn-retarget').disabled = false;
+          document.getElementById('btn-add-animation').disabled = false;
+          document.getElementById('btn-save-project').disabled = false;
+          
+          uiManager.showNotification('Project loaded successfully!', 'success');
+        }
+      } else {
+        uiManager.showNotification(`Failed to load project: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error loading dropped project:', error);
+      uiManager.showNotification(`Failed to load project: ${error.message}`, 'error');
+    } finally {
+      // Hide loading overlay after all UI updates are complete
+      loadingOverlay.classList.remove('active');
+    }
+    return;
+  }
+
+  // Handle model files
   if (!['glb', 'gltf', 'fbx'].includes(extension)) {
-    uiManager.showNotification('Invalid file format. Please use GLB, GLTF, or FBX files.', 'error');
+    uiManager.showNotification('Invalid file format. Please use GLB, GLTF, FBX, or 3DPROJ files.', 'error');
     return;
   }
 
@@ -112,6 +249,9 @@ viewportContainer.addEventListener('drop', async (e) => {
     
     // Enable add animation button
     document.getElementById('btn-add-animation').disabled = false;
+    
+    // Enable save project button
+    document.getElementById('btn-save-project').disabled = false;
   };
   reader.readAsArrayBuffer(file);
 });
@@ -161,4 +301,4 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-console.log('3D Animation Viewer initialized');
+console.log('Animexa initialized');

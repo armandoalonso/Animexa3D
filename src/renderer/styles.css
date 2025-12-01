@@ -290,6 +290,15 @@ html, body {
   margin-bottom: 0.75rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid #e0e6ed;
+  cursor: pointer;
+  user-select: none;
+}
+
+.material-header:hover {
+  background: rgba(0, 0, 0, 0.02);
+  margin: -0.25rem;
+  padding: 0.25rem 0.25rem 0.75rem 0.25rem;
+  border-radius: 4px;
 }
 
 .material-name {
@@ -297,6 +306,23 @@ html, body {
   color: #2c3e50;
   font-size: 0.9rem;
   flex: 1;
+}
+
+.material-toggle {
+  font-size: 0.7rem;
+  color: #6c757d;
+  transition: transform 0.2s ease;
+  margin-left: 0.5rem;
+}
+
+.material-card.collapsed .texture-slots {
+  display: none;
+}
+
+.material-card.collapsed .material-header {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .texture-slots {
@@ -520,6 +546,43 @@ html, body {
 .loading-text {
   font-size: 1.2rem;
   color: #ffffff;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(8px);
+}
+
+.loading-overlay.active {
+  display: flex;
+}
+
+.loading-content {
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 6px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #3298dc;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1.5rem;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Drop Overlay for Canvas */
@@ -1295,6 +1358,27 @@ html, body {
   font-size: 0.875rem;
 }
 
+.use-filename-btn {
+  background-color: #f5f5f5;
+  border: 1px solid #dbdbdb;
+  color: #4a4a4a;
+  transition: all 0.15s ease;
+}
+
+.use-filename-btn:hover {
+  background-color: #3273dc;
+  border-color: #3273dc;
+  color: white;
+}
+
+.use-filename-btn:active {
+  transform: scale(0.95);
+}
+
+.use-filename-btn svg {
+  display: block;
+}
+
 /* Inline Retargeting Styles (for Add Animation Modal) */
 .bone-tree-container-small {
   max-height: 200px;
@@ -1350,6 +1434,55 @@ html, body {
   border: 1px solid #e0e6ed;
   border-radius: 4px;
   margin-bottom: 0.25rem;
+}
+
+/* Animation Drop Zone */
+.animation-drop-zone {
+  position: relative;
+  padding: 2rem;
+  border: 2px dashed #dbdbdb;
+  border-radius: 8px;
+  background: #f8f9fa;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.animation-drop-zone.drag-over {
+  border-color: #3298dc;
+  background: #e8f4fd;
+}
+
+.animation-drop-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(50, 152, 220, 0.95);
+  border-radius: 8px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.animation-drop-overlay.active {
+  display: flex;
+}
+
+.animation-drop-content {
+  text-align: center;
+  color: white;
+}
+
+.animation-drop-content .title {
+  color: white;
+  margin-bottom: 0.5rem;
+}
+
+.animation-drop-content .subtitle {
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .mapping-item-inline button {

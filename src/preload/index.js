@@ -9,6 +9,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveFrame: (folderPath, filename, dataURL, subfolder) => 
     ipcRenderer.invoke('file:saveFrame', folderPath, filename, dataURL, subfolder),
   
+  // Project operations
+  saveProjectDialog: () => ipcRenderer.invoke('dialog:saveProject'),
+  openProjectDialog: () => ipcRenderer.invoke('dialog:openProject'),
+  saveProject: (filePath, projectData, textureFiles) => 
+    ipcRenderer.invoke('file:saveProject', filePath, projectData, textureFiles),
+  loadProject: (filePath) => 
+    ipcRenderer.invoke('file:loadProject', filePath),
+  saveDroppedProject: (bufferArray, fileName) =>
+    ipcRenderer.invoke('file:saveDroppedProject', bufferArray, fileName),
+  readFileAsBuffer: (filePath) =>
+    ipcRenderer.invoke('file:readFileAsBuffer', filePath),
+  
   // Bone mapping operations
   saveBoneMapping: (name, mappingData) => 
     ipcRenderer.invoke('file:saveBoneMapping', name, mappingData),

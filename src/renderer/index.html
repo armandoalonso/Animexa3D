@@ -3,12 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3D Animation Viewer</title>
+  <title>Animexa</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <!-- Notification Container -->
   <div id="notification-container" class="notification-container"></div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="loading-content">
+      <div class="loading-spinner"></div>
+      <p class="title is-4 has-text-white">Loading Project...</p>
+      <p class="subtitle is-6 has-text-white-bis">Please wait</p>
+    </div>
+  </div>
 
   <!-- Main Layout -->
   <div class="app-container">
@@ -16,19 +25,31 @@
     <nav class="navbar is-dark" role="navigation">
       <div class="navbar-brand">
         <span class="navbar-item">
-          <strong>3D Animation Viewer</strong>
+          <strong>Animexa</strong>
         </span>
       </div>
       <div class="navbar-menu">
         <div class="navbar-start">
           <div class="navbar-item">
             <div class="buttons">
+              <button id="btn-new-project" class="button is-light">
+                <span class="icon"><span>📄</span></span>
+                <span>New Project</span>
+              </button>
               <button id="btn-open-model" class="button is-primary">
                 <span class="icon"><span>📂</span></span>
                 <span>Open Model</span>
               </button>
-              <button id="btn-export" class="button is-success" disabled>
+              <button id="btn-save-project" class="button is-link" disabled>
                 <span class="icon"><span>💾</span></span>
+                <span>Save Project</span>
+              </button>
+              <button id="btn-load-project" class="button is-link">
+                <span class="icon"><span>📁</span></span>
+                <span>Load Project</span>
+              </button>
+              <button id="btn-export" class="button is-success" disabled>
+                <span class="icon"><span>📤</span></span>
                 <span>Export Frames</span>
               </button>
               <button id="btn-capture" class="button is-warning" disabled>
@@ -83,17 +104,17 @@
         <!-- Drop Zone Overlay for Canvas -->
         <div id="drop-overlay-canvas" class="drop-overlay-canvas">
           <div class="drop-content">
-            <p class="title is-3">Drop 3D Model Here</p>
-            <p class="subtitle">Supported formats: GLB, GLTF, FBX</p>
+            <p class="title is-3">Drop File Here</p>
+            <p class="subtitle">3D Model (GLB, GLTF, FBX) or Project File (.3dproj)</p>
           </div>
         </div>
         
         <canvas id="webgl-canvas"></canvas>
         <div id="empty-state" class="empty-state-overlay">
           <div class="empty-state-content">
-            <p class="title is-4">Drop a 3D model here</p>
-            <p class="subtitle is-6">or click "Open Model" to browse</p>
-            <p class="has-text-grey">Supported formats: GLB, GLTF, FBX</p>
+            <p class="title is-4">Drop a file here</p>
+            <p class="subtitle is-6">3D Model or Project File</p>
+            <p class="has-text-grey">Supported: GLB, GLTF, FBX, 3DPROJ</p>
           </div>
         </div>
         <div id="loading-overlay" class="loading-overlay" style="display: none;">
@@ -541,10 +562,19 @@
         
         <div class="field">
           <label class="label">Load Animation File</label>
-          <button id="btn-load-animation-file" class="button is-primary">
-            <span class="icon">📂</span>
-            <span>Browse Animation File</span>
-          </button>
+          <div id="animation-drop-zone" class="animation-drop-zone">
+            <button id="btn-load-animation-file" class="button is-primary">
+              <span class="icon">📂</span>
+              <span>Browse Animation File</span>
+            </button>
+            <p class="help has-text-centered" style="margin-top: 0.5rem;">or drag and drop an animation file here</p>
+            <div id="animation-drop-overlay" class="animation-drop-overlay">
+              <div class="animation-drop-content">
+                <p class="title is-5">Drop Animation File</p>
+                <p class="subtitle is-6">FBX, GLB, GLTF</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div id="animation-file-info" style="display: none; margin-top: 1rem;">
@@ -568,6 +598,12 @@
             <div class="notification is-warning is-light">
               <p><strong>⚠ Bone structures don't match perfectly.</strong></p>
               <p class="help">Use retargeting to adapt animations to your model's skeleton.</p>
+            </div>
+
+            <!-- Rest Pose Warning -->
+            <div class="notification is-info is-light">
+              <p><strong>💡 Rest Pose Differences</strong></p>
+              <p class="help">If your model and animation have different rest poses (T-pose vs A-pose), the retargeted animation may look incorrect. You can try enabling pose correction below after mapping bones.</p>
             </div>
 
             <div class="field is-grouped" style="margin-bottom: 1rem;">
@@ -595,6 +631,32 @@
             <div id="inline-mapping-info" class="box" style="display: none;">
               <p><strong>Mapped Bones:</strong> <span id="inline-mapped-count">0</span></p>
               <p><strong>Confidence:</strong> <span id="inline-mapping-confidence">0%</span></p>
+              
+              <!-- Retargeting Options -->
+              <div class="field" style="margin-top: 1rem;">
+                <label class="label is-small">Retargeting Options</label>
+                <label class="checkbox">
+                  <input type="checkbox" id="preserve-hip-position">
+                  Preserve Hip/Root Position
+                </label>
+                <p class="help">Keep the original hip/root motion from the animation</p>
+                
+                <label class="checkbox" style="margin-top: 0.5rem;">
+                  <input type="checkbox" id="apply-rest-pose-correction" checked>
+                  Apply Rest Pose Correction (Experimental)
+                </label>
+                <p class="help">Attempts to correct T-pose/A-pose differences by analyzing rest poses</p>
+              </div>
+              
+              <div class="notification is-warning is-light" style="margin-top: 0.5rem;">
+                <p class="is-size-7"><strong>Rest Pose Correction:</strong></p>
+                <p class="is-size-7">This tool will attempt to calculate and apply rotational offsets between your model's rest pose and the animation's rest pose. This can help with T-pose vs A-pose mismatches.</p>
+                <ul class="is-size-7" style="margin-left: 1rem; margin-top: 0.25rem;">
+                  <li><strong>✓ What it does:</strong> Analyzes first frame rotations and applies corrections</li>
+                  <li><strong>⚠ Limitations:</strong> Works best for similar skeletons, may need manual adjustment</li>
+                  <li><strong>💡 Tip:</strong> Disable if animation looks worse with it enabled</li>
+                </ul>
+              </div>
             </div>
 
             <!-- Bone Trees (collapsible) -->

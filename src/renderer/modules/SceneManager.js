@@ -225,4 +225,46 @@ export class SceneManager {
   getCanvas() {
     return this.canvas;
   }
+  
+  clearScene() {
+    // Remove current model from scene
+    if (this.currentModel) {
+      this.scene.remove(this.currentModel);
+      
+      // Dispose of geometries and materials
+      this.currentModel.traverse((child) => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(material => {
+                if (material.map) material.map.dispose();
+                if (material.normalMap) material.normalMap.dispose();
+                if (material.roughnessMap) material.roughnessMap.dispose();
+                if (material.metalnessMap) material.metalnessMap.dispose();
+                material.dispose();
+              });
+            } else {
+              if (child.material.map) child.material.map.dispose();
+              if (child.material.normalMap) child.material.normalMap.dispose();
+              if (child.material.roughnessMap) child.material.roughnessMap.dispose();
+              if (child.material.metalnessMap) child.material.metalnessMap.dispose();
+              child.material.dispose();
+            }
+          }
+        }
+      });
+      
+      this.currentModel = null;
+    }
+    
+    // Clear mixer
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+      this.mixer = null;
+    }
+    
+    // Reset clock
+    this.clock = new THREE.Clock();
+  }
 }

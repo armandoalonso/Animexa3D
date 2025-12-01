@@ -1,4 +1,4 @@
-# 3D Animation Viewer
+# Animexa
 
 A desktop application for viewing, playing, and exporting 3D animated models with support for animation retargeting between different rigs.
 

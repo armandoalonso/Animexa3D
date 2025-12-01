@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const AdmZip = require('adm-zip');
 
 let mainWindow;
 
@@ -8,12 +9,16 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
+    icon: path.join(__dirname, '../../icon256.png'),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.join(__dirname, '../preload/index.js')
     }
   });
+
+  // Maximize window on startup
+  mainWindow.maximize();
 
   // Load the index.html
   if (process.env.NODE_ENV === 'development') {
@@ -230,6 +235,159 @@ ipcMain.handle('file:saveTextureToTemp', async (event, filename, bufferArray) =>
     return filePath;
   } catch (error) {
     console.error('Error saving texture to temp:', error);
+    throw error;
+  }
+});
+
+// Save project dialog
+ipcMain.handle('dialog:saveProject', async () => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save Project',
+    defaultPath: 'project.3dproj',
+    filters: [
+      { name: '3D Project Files', extensions: ['3dproj'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+
+  if (result.canceled) {
+    return null;
+  }
+
+  return result.filePath;
+});
+
+// Open project dialog
+ipcMain.handle('dialog:openProject', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Open Project',
+    properties: ['openFile'],
+    filters: [
+      { name: '3D Project Files', extensions: ['3dproj'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+
+  if (result.canceled) {
+    return null;
+  }
+
+  return result.filePaths[0];
+});
+
+// Save project to file (zip-based)
+ipcMain.handle('file:saveProject', async (event, filePath, projectData, textureFiles) => {
+  try {
+    const tempDir = path.join(app.getPath('temp'), 'animexa-project-' + Date.now());
+    await fs.promises.mkdir(tempDir, { recursive: true });
+
+    // 1. Save the model file
+    if (projectData.model && projectData.model.bufferData) {
+      const modelFileName = projectData.model.name;
+      const modelPath = path.join(tempDir, modelFileName);
+      const modelBuffer = Buffer.from(projectData.model.bufferData);
+      await fs.promises.writeFile(modelPath, modelBuffer);
+      
+      // Update projectData to reference the file name instead of buffer
+      projectData.model.fileName = modelFileName;
+      delete projectData.model.bufferData;
+      delete projectData.model.path;
+    }
+
+    // 2. Copy texture files to textures subfolder
+    if (textureFiles && textureFiles.length > 0) {
+      const texturesDir = path.join(tempDir, 'textures');
+      await fs.promises.mkdir(texturesDir, { recursive: true });
+      
+      for (const textureFile of textureFiles) {
+        if (fs.existsSync(textureFile.sourcePath)) {
+          const fileName = path.basename(textureFile.sourcePath);
+          const destPath = path.join(texturesDir, fileName);
+          await fs.promises.copyFile(textureFile.sourcePath, destPath);
+          
+          // Update material texture references to use relative file names
+          const material = projectData.materials.find(m => m.uuid === textureFile.materialUuid);
+          if (material) {
+            const texture = material.textures.find(t => t.key === textureFile.textureKey);
+            if (texture) {
+              texture.fileName = fileName;
+              delete texture.path;
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Save project.json metadata
+    const projectJsonPath = path.join(tempDir, 'project.json');
+    await fs.promises.writeFile(projectJsonPath, JSON.stringify(projectData, null, 2));
+
+    // 4. Create zip archive
+    const zip = new AdmZip();
+    zip.addLocalFolder(tempDir);
+    zip.writeZip(filePath);
+
+    // 5. Clean up temp directory
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+
+    return { success: true, path: filePath };
+  } catch (error) {
+    console.error('Error saving project:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Load project from file (zip-based)
+ipcMain.handle('file:loadProject', async (event, filePath) => {
+  try {
+    // 1. Extract zip to temp directory
+    const tempDir = path.join(app.getPath('temp'), 'animexa-extract-' + Date.now());
+    await fs.promises.mkdir(tempDir, { recursive: true });
+    
+    const zip = new AdmZip(filePath);
+    zip.extractAllTo(tempDir, true);
+
+    // 2. Read project.json
+    const projectJsonPath = path.join(tempDir, 'project.json');
+    const projectJson = await fs.promises.readFile(projectJsonPath, 'utf8');
+    const projectData = JSON.parse(projectJson);
+
+    // Return the extracted path so renderer can load files from it
+    return { 
+      success: true, 
+      data: projectData,
+      extractedPath: tempDir
+    };
+  } catch (error) {
+    console.error('Error loading project:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Read file as buffer (for loading model from extracted project)
+ipcMain.handle('file:readFileAsBuffer', async (event, filePath) => {
+  try {
+    const buffer = await fs.promises.readFile(filePath);
+    return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  } catch (error) {
+    console.error('Error reading file as buffer:', error);
+    throw error;
+  }
+});
+
+// Save dropped project file to temp location
+ipcMain.handle('file:saveDroppedProject', async (event, bufferArray, fileName) => {
+  try {
+    const tempDir = path.join(app.getPath('temp'), 'animexa-dropped-projects');
+    await fs.promises.mkdir(tempDir, { recursive: true });
+    
+    const tempPath = path.join(tempDir, fileName);
+    const buffer = Buffer.from(bufferArray);
+    await fs.promises.writeFile(tempPath, buffer);
+    
+    return tempPath;
+  } catch (error) {
+    console.error('Error saving dropped project:', error);
     throw error;
   }
 });

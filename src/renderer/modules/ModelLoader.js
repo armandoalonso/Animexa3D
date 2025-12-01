@@ -29,6 +29,8 @@ export class ModelLoader {
       }
       
       modelData.filename = filename;
+      modelData.name = filename;
+      modelData.bufferData = arrayBuffer; // Store original buffer for saving
       this.currentModelData = modelData;
       
       // Add model to scene
@@ -180,6 +182,16 @@ export class ModelLoader {
   
   getCurrentModelData() {
     return this.currentModelData;
+  }
+  
+  clearCurrentModel() {
+    this.currentModelData = null;
+    
+    // Hide model info
+    const modelInfo = document.getElementById('model-info');
+    if (modelInfo) {
+      modelInfo.style.display = 'none';
+    }
   }
   
   /**

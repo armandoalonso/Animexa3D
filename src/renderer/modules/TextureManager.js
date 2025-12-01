@@ -104,17 +104,32 @@ export class TextureManager {
       if (texture.image.src) {
         // Extract filename from data URL or path
         if (texture.image.src.startsWith('data:')) {
-          return 'Embedded Texture';
+          return 'Embedded';
         }
-        return texture.image.src.split('/').pop() || 'Texture';
+        if (texture.image.src.startsWith('blob:')) {
+          return 'Blob Texture';
+        }
+        // Try to extract filename from URL
+        const urlPath = texture.image.src.split('/').pop();
+        const cleanPath = urlPath.split('?')[0]; // Remove query params
+        return cleanPath || 'Texture';
       } else if (texture.image.currentSrc) {
-        return texture.image.currentSrc.split('/').pop() || 'Texture';
+        const urlPath = texture.image.currentSrc.split('/').pop();
+        const cleanPath = urlPath.split('?')[0];
+        return cleanPath || 'Texture';
+      } else if (texture.image instanceof HTMLCanvasElement) {
+        return 'Canvas/Embedded';
       }
     }
     
     // Check if texture was loaded from a file
     if (texture.userData && texture.userData.path) {
       return texture.userData.path.split('/').pop();
+    }
+
+    // Check texture name
+    if (texture.name) {
+      return texture.name;
     }
 
     return 'Embedded/Generated';
@@ -206,12 +221,14 @@ export class TextureManager {
           label: slot.label,
           shortLabel: slot.shortLabel,
           source: imagePath.split(/[/\\]/).pop(),
+          extractedPath: imagePath, // Store full path for saving
           image: newTexture.image,
           uuid: newTexture.uuid
         };
       } else {
         materialData.textures[textureKey].texture = newTexture;
         materialData.textures[textureKey].source = imagePath.split(/[/\\]/).pop();
+        materialData.textures[textureKey].extractedPath = imagePath; // Store full path for saving
         materialData.textures[textureKey].image = newTexture.image;
         materialData.textures[textureKey].uuid = newTexture.uuid;
       }
@@ -289,25 +306,61 @@ export class TextureManager {
       for (const [key, textureData] of Object.entries(materialData.textures)) {
         const texture = textureData.texture;
         
-        // Check if texture is embedded (data URL)
-        if (texture.image && texture.image.src && texture.image.src.startsWith('data:')) {
-          const promise = this.extractEmbeddedTexture(
-            materialData.uuid,
-            key,
-            texture.image.src,
-            materialData.name
-          ).then(path => {
-            if (path) {
-              textureData.source = path.split(/[/\\]/).pop();
-              textureData.extractedPath = path;
+        // Check if texture is embedded (data URL or canvas element)
+        const isEmbedded = texture.image && (
+          (texture.image.src && texture.image.src.startsWith('data:')) ||
+          (texture.image instanceof HTMLCanvasElement) ||
+          (!texture.image.src && texture.image.currentSrc)
+        );
+        
+        if (isEmbedded) {
+          let dataUrl = null;
+          
+          // Get data URL from different sources
+          if (texture.image.src && texture.image.src.startsWith('data:')) {
+            dataUrl = texture.image.src;
+          } else if (texture.image instanceof HTMLCanvasElement) {
+            dataUrl = texture.image.toDataURL('image/png');
+          } else if (texture.image.currentSrc) {
+            // Try to convert to data URL
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = texture.image.width || 512;
+              canvas.height = texture.image.height || 512;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(texture.image, 0, 0);
+              dataUrl = canvas.toDataURL('image/png');
+            } catch (e) {
+              console.warn('Could not extract texture data:', e);
             }
-          });
-          promises.push(promise);
+          }
+          
+          if (dataUrl) {
+            const promise = this.extractEmbeddedTexture(
+              materialData.uuid,
+              key,
+              dataUrl,
+              materialData.name
+            ).then(path => {
+              if (path) {
+                textureData.source = path.split(/[/\\]/).pop();
+                textureData.extractedPath = path;
+                textureData.isEmbedded = true;
+                console.log(`Extracted embedded texture: ${materialData.name} - ${key}`);
+              }
+            });
+            promises.push(promise);
+          }
+        } else if (texture.image && texture.image.src) {
+          // External texture file
+          textureData.isEmbedded = false;
+          console.log(`External texture found: ${materialData.name} - ${key}: ${texture.image.src}`);
         }
       }
     }
 
     await Promise.all(promises);
+    console.log(`Extracted ${promises.length} embedded textures`);
   }
 
   /**
@@ -322,19 +375,23 @@ export class TextureManager {
     try {
       // Convert data URL to buffer
       const base64Data = dataUrl.split(',')[1];
-      const buffer = Buffer.from(base64Data, 'base64');
+      const bufferArray = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
 
       // Determine file extension from data URL
       const mimeMatch = dataUrl.match(/data:image\/(\w+);/);
-      const extension = mimeMatch ? mimeMatch[1] : 'png';
+      let extension = mimeMatch ? mimeMatch[1] : 'png';
+      
+      // Handle special cases
+      if (extension === 'jpeg') extension = 'jpg';
 
       // Create a safe filename
       const safeMaterialName = materialName.replace(/[^a-zA-Z0-9]/g, '_');
       const filename = `${safeMaterialName}_${textureKey}.${extension}`;
 
       // Save to temp directory via electron
-      const path = await window.electronAPI.saveTextureToTemp(filename, buffer);
+      const path = await window.electronAPI.saveTextureToTemp(filename, Array.from(bufferArray));
       
+      console.log(`Saved embedded texture to: ${path}`);
       return path;
     } catch (error) {
       console.error('Failed to extract embedded texture:', error);
@@ -365,6 +422,22 @@ export class TextureManager {
    */
   getMaterials() {
     return this.materials;
+  }
+  
+  clearTextures() {
+    // Clear texture cache
+    this.textureCache.forEach((texture) => {
+      if (texture && texture.dispose) {
+        texture.dispose();
+      }
+    });
+    this.textureCache.clear();
+    
+    // Clear materials array
+    this.materials = [];
+    
+    // Reset temp texture path
+    this.tempTexturePath = null;
   }
 
   /**

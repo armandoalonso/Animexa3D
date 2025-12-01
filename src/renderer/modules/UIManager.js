@@ -1,11 +1,14 @@
+import * as THREE from 'three';
+
 export class UIManager {
-  constructor(sceneManager, modelLoader, animationManager, exportManager, retargetManager, textureManager) {
+  constructor(sceneManager, modelLoader, animationManager, exportManager, retargetManager, textureManager, projectManager) {
     this.sceneManager = sceneManager;
     this.modelLoader = modelLoader;
     this.animationManager = animationManager;
     this.exportManager = exportManager;
     this.retargetManager = retargetManager;
     this.textureManager = textureManager;
+    this.projectManager = projectManager;
     
     // Make UIManager globally accessible for other modules
     window.uiManager = this;
@@ -15,7 +18,10 @@ export class UIManager {
   
   initEventListeners() {
     // File operations
+    document.getElementById('btn-new-project').addEventListener('click', () => this.handleNewProject());
     document.getElementById('btn-open-model').addEventListener('click', () => this.handleOpenModel());
+    document.getElementById('btn-save-project').addEventListener('click', () => this.handleSaveProject());
+    document.getElementById('btn-load-project').addEventListener('click', () => this.handleLoadProject());
     document.getElementById('btn-export').addEventListener('click', () => this.handleOpenExportModal());
     document.getElementById('btn-capture').addEventListener('click', () => this.handleCaptureFrame());
     document.getElementById('btn-retarget').addEventListener('click', () => this.handleOpenRetargetModal());
@@ -105,6 +111,49 @@ export class UIManager {
     });
   }
   
+  async handleSaveProject() {
+    try {
+      await this.projectManager.saveProject();
+      this.showNotification('Project saved successfully!', 'success');
+    } catch (error) {
+      console.error('Error saving project:', error);
+      this.showNotification(`Failed to save project: ${error.message}`, 'error');
+    }
+  }
+
+  async handleLoadProject() {
+    const loadingOverlay = document.getElementById('loading-overlay');
+    
+    try {
+      const success = await this.projectManager.loadProject();
+      
+      if (success) {
+        // Refresh UI displays
+        await this.displayTextures();
+        
+        // Wait for render cycle to complete
+        await new Promise(resolve => requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setTimeout(resolve, 300);
+          });
+        }));
+        
+        // Enable relevant buttons
+        document.getElementById('btn-retarget').disabled = false;
+        document.getElementById('btn-add-animation').disabled = false;
+        document.getElementById('btn-save-project').disabled = false;
+        
+        this.showNotification('Project loaded successfully!', 'success');
+      }
+    } catch (error) {
+      console.error('Error loading project:', error);
+      this.showNotification(`Failed to load project: ${error.message}`, 'error');
+    } finally {
+      // Hide loading overlay after all UI updates are complete
+      loadingOverlay.classList.remove('active');
+    }
+  }
+
   async handleOpenModel() {
     console.log('handleOpenModel called');
     try {
@@ -120,6 +169,11 @@ export class UIManager {
         fileData.name
       );
       
+      // Store the file path for saving
+      if (modelData) {
+        modelData.path = fileData.path;
+      }
+      
       console.log('Model loaded successfully:', modelData);
       
       // Load animations
@@ -132,13 +186,27 @@ export class UIManager {
 
       // Extract and display textures
       const materials = this.textureManager.extractMaterials(modelData.model);
-      console.log('Extracted materials:', materials);
+      console.log('Extracted materials:', materials.length);
+      
+      // Log material and texture details
+      materials.forEach((mat, idx) => {
+        console.log(`Material ${idx + 1}: ${mat.name}`);
+        const textureKeys = Object.keys(mat.textures);
+        if (textureKeys.length > 0) {
+          console.log(`  Textures found: ${textureKeys.join(', ')}`);
+        } else {
+          console.log('  No textures');
+        }
+      });
       
       // Extract embedded textures if any
       if (materials.length > 0) {
+        console.log('Starting embedded texture extraction...');
         await this.textureManager.extractEmbeddedTextures(materials);
+        console.log('Embedded texture extraction complete');
         this.displayTextures();
       } else {
+        console.log('No materials found in model');
         this.clearTextureDisplay();
       }
       
@@ -154,9 +222,58 @@ export class UIManager {
         console.error('Add animation button not found!');
       }
       
+      // Enable save project button
+      document.getElementById('btn-save-project').disabled = false;
+      
     } catch (error) {
       console.error('Error opening model:', error);
       this.showNotification(`Failed to open model: ${error.message}`, 'error');
+    }
+  }
+  
+  handleNewProject() {
+    // Confirm before clearing
+    const hasContent = this.modelLoader.getCurrentModelData() !== null;
+    
+    if (hasContent) {
+      const confirmed = confirm('Are you sure you want to start a new project? All unsaved changes will be lost.');
+      if (!confirmed) return;
+    }
+    
+    try {
+      // Clear the scene
+      this.sceneManager.clearScene();
+      
+      // Clear animations
+      this.animationManager.loadAnimations([]);
+      
+      // Clear model data
+      this.modelLoader.clearCurrentModel();
+      
+      // Clear textures
+      this.textureManager.clearTextures();
+      this.clearTextureDisplay();
+      
+      // Reset UI state
+      document.getElementById('btn-retarget').disabled = true;
+      document.getElementById('btn-add-animation').disabled = true;
+      document.getElementById('btn-save-project').disabled = true;
+      document.getElementById('btn-export').disabled = true;
+      document.getElementById('btn-capture').disabled = true;
+      
+      // Reset animation list
+      document.getElementById('animation-list').innerHTML = '<div class="empty-state"><p class="has-text-grey">No model loaded</p></div>';
+      
+      // Reset model info
+      const modelInfo = document.getElementById('model-info');
+      if (modelInfo) {
+        modelInfo.style.display = 'none';
+      }
+      
+      this.showNotification('New project started', 'success');
+    } catch (error) {
+      console.error('Error creating new project:', error);
+      this.showNotification(`Failed to create new project: ${error.message}`, 'error');
     }
   }
   
@@ -686,6 +803,99 @@ export class UIManager {
     this.inlineSelectedCurrentBone = null;
     this.inlineSelectedAnimBone = null;
     
+    // Setup drag-drop handlers for animation files
+    const dropZone = document.getElementById('animation-drop-zone');
+    const dropOverlay = document.querySelector('.animation-drop-overlay');
+    
+    // Remove previous listeners if any
+    dropZone.replaceWith(dropZone.cloneNode(true));
+    const newDropZone = document.getElementById('animation-drop-zone');
+    const newDropOverlay = document.querySelector('.animation-drop-overlay');
+    
+    let dragCounter = 0;
+    
+    newDropZone.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      dragCounter++;
+      if (dragCounter === 1) {
+        newDropZone.classList.add('drag-over');
+        newDropOverlay.classList.add('active');
+      }
+    });
+    
+    newDropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+    
+    newDropZone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter === 0) {
+        newDropZone.classList.remove('drag-over');
+        newDropOverlay.classList.remove('active');
+      }
+    });
+    
+    newDropZone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      newDropZone.classList.remove('drag-over');
+      newDropOverlay.classList.remove('active');
+      
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length === 0) return;
+      
+      const file = files[0];
+      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      
+      // Check if it's a valid animation file
+      if (!['.fbx', '.gltf', '.glb'].includes(ext)) {
+        this.showNotification('Please drop an FBX or GLTF/GLB file', 'warning');
+        return;
+      }
+      
+      // Read the file
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const animationData = await this.modelLoader.loadAnimationFile(
+          arrayBuffer,
+          ext.replace('.', ''),
+          file.name
+        );
+        
+        // Store loaded animation data with filename
+        this.loadedAnimationData = animationData;
+        this.loadedAnimationData.fileName = file.name;
+        
+        // Update file info
+        document.getElementById('anim-file-name').textContent = file.name;
+        document.getElementById('anim-file-count').textContent = animationData.animations.length;
+        document.getElementById('anim-file-bones').textContent = animationData.boneNames.length;
+        document.getElementById('animation-file-info').style.display = 'block';
+        
+        // Verify bone structure compatibility
+        const currentModel = this.modelLoader.getCurrentModelData();
+        const verification = this.modelLoader.verifyBoneStructureCompatibility(
+          currentModel.skeletons,
+          animationData.skeletons
+        );
+        
+        // Display verification result
+        this.displayBoneVerification(verification);
+        
+        // If compatible or at least partially compatible, show animation selection
+        if (verification.compatible || verification.matchPercentage >= 50) {
+          this.displayAnimationSelection(animationData.animations);
+        } else {
+          document.getElementById('animation-selection-container').style.display = 'none';
+          document.getElementById('btn-add-selected-animations').disabled = true;
+        }
+      } catch (error) {
+        console.error('Error loading dropped animation file:', error);
+        this.showNotification('Failed to load animation file: ' + error.message, 'danger');
+      }
+    });
+    
     document.getElementById('add-animation-modal').classList.add('is-active');
   }
   
@@ -702,8 +912,9 @@ export class UIManager {
         fileData.name
       );
       
-      // Store loaded animation data
+      // Store loaded animation data with filename
       this.loadedAnimationData = animationData;
+      this.loadedAnimationData.fileName = fileData.name;
       
       // Update file info
       document.getElementById('anim-file-name').textContent = fileData.name;
@@ -806,6 +1017,10 @@ export class UIManager {
     
     container.innerHTML = '';
     
+    // Extract filename without extension from the loaded file
+    const fileName = this.loadedAnimationData?.fileName || this.loadedAnimationData?.filename || '';
+    const fileNameWithoutExt = fileName ? (fileName.substring(0, fileName.lastIndexOf('.')) || fileName) : '';
+    
     animations.forEach((clip, index) => {
       const item = document.createElement('div');
       item.className = 'animation-item-selectable';
@@ -819,8 +1034,25 @@ export class UIManager {
         </div>
         <div class="field">
           <label class="label is-small">Rename (optional)</label>
-          <input type="text" class="input is-small animation-rename-input" data-index="${index}" 
-                 placeholder="Leave empty to keep original name" value="">
+          <div class="field has-addons">
+            <div class="control is-expanded">
+              <input type="text" class="input is-small animation-rename-input" data-index="${index}" 
+                     placeholder="Leave empty to keep original name" value="">
+            </div>
+            <div class="control">
+              <button class="button is-small use-filename-btn" data-index="${index}" 
+                      title="Use file name">
+                <span class="icon is-small">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="12" y1="18" x2="12" y2="12"></line>
+                    <line x1="9" y1="15" x2="15" y2="15"></line>
+                  </svg>
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
       `;
       container.appendChild(item);
@@ -831,6 +1063,18 @@ export class UIManager {
     checkboxes.forEach(cb => {
       cb.addEventListener('change', () => {
         this.updateAddAnimationButton();
+      });
+    });
+    
+    // Add event listeners to use-filename buttons
+    const filenameButtons = container.querySelectorAll('.use-filename-btn');
+    filenameButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const index = btn.getAttribute('data-index');
+        const input = container.querySelector(`.animation-rename-input[data-index="${index}"]`);
+        if (input && fileNameWithoutExt) {
+          input.value = fileNameWithoutExt;
+        }
       });
     });
     
@@ -872,6 +1116,11 @@ export class UIManager {
     // Update mappings display if tree is visible
     if (document.getElementById('inline-bone-trees').style.display === 'block') {
       this.updateInlineMappingDisplay();
+    }
+    
+    // Show animation selection now that we have mapping
+    if (this.loadedAnimationData.animations && this.loadedAnimationData.animations.length > 0) {
+      this.displayAnimationSelection(this.loadedAnimationData.animations);
     }
     
     // Enable add button if animations are selected
@@ -1013,6 +1262,12 @@ export class UIManager {
     
     // Rebuild trees to show new mapping
     this.buildInlineBoneTrees();
+    
+    // Show animation selection if we now have mappings and animations
+    if (this.loadedAnimationData && this.loadedAnimationData.animations && this.loadedAnimationData.animations.length > 0) {
+      this.displayAnimationSelection(this.loadedAnimationData.animations);
+    }
+    
     this.updateAddAnimationButton();
   }
   
@@ -1111,43 +1366,91 @@ export class UIManager {
     if (this.inlineRetargetingActive && Object.keys(this.inlineBoneMapping).length > 0) {
       const currentModel = this.modelLoader.getCurrentModelData();
       
-      // Temporarily set up retargeting context
-      this.retargetManager.setSourceModel({
-        model: currentModel.model,
-        skeletons: currentModel.skeletons
+      // Get retargeting options
+      const preserveHipPosition = document.getElementById('preserve-hip-position')?.checked || false;
+      const applyRestPoseCorrection = document.getElementById('apply-rest-pose-correction')?.checked || false;
+      
+      console.log('=== RETARGETING ANIMATION ===');
+      console.log('Bone mapping (current->anim):', this.inlineBoneMapping);
+      console.log('Animation bones:', this.loadedAnimationData.boneNames);
+      console.log('Current model bones:', currentModel.skeletons.boneNames);
+      console.log('Options:', { preserveHipPosition, applyRestPoseCorrection });
+      
+      // Invert the bone mapping for retargeting
+      // inlineBoneMapping is: currentModelBone -> animBone
+      // We need: animBone -> currentModelBone
+      const invertedMapping = {};
+      Object.entries(this.inlineBoneMapping).forEach(([currentBone, animBone]) => {
+        invertedMapping[animBone] = currentBone;
       });
       
-      this.retargetManager.setTargetModel({
-        model: currentModel.model, // Using same model
-        skeletons: this.loadedAnimationData.skeletons
-      });
+      console.log('Inverted mapping (anim->current):', invertedMapping);
       
-      // Set the bone mapping
-      this.retargetManager.boneMapping = this.inlineBoneMapping;
+      // Calculate rest pose offsets if correction is enabled
+      let restPoseOffsets = null;
+      if (applyRestPoseCorrection) {
+        console.log('\n--- Calculating Rest Pose Offsets ---');
+        restPoseOffsets = this.calculateRestPoseOffsets(
+          currentModel.model,
+          this.loadedAnimationData,
+          selectedAnimations[0], // Use first animation to extract rest pose
+          invertedMapping
+        );
+        console.log('Rest pose offsets calculated:', Object.keys(restPoseOffsets).length, 'bones');
+      }
       
       // Retarget each animation
       const retargetedAnimations = [];
       for (const animation of selectedAnimations) {
         try {
-          // For add-animation workflow, we need to adapt animation to current model
-          // This is a simplified retargeting - we rename bones in the animation tracks
-          const retargetedClip = this.retargetAnimationForCurrentModel(animation);
+          console.log(`\nRetargeting: ${animation.name}`);
+          console.log(`  Original tracks: ${animation.tracks.length}`);
+          
+          // Adapt animation to current model
+          const retargetedClip = this.retargetAnimationForCurrentModel(
+            animation, 
+            invertedMapping,
+            preserveHipPosition,
+            restPoseOffsets
+          );
+          
           if (retargetedClip) {
+            console.log(`  ✓ Retargeted tracks: ${retargetedClip.tracks.length}`);
             retargetedAnimations.push(retargetedClip);
+          } else {
+            console.warn(`  ✗ Failed to retarget ${animation.name}`);
           }
         } catch (error) {
-          console.error('Failed to retarget animation:', animation.name, error);
+          console.error(`  ✗ Error retargeting ${animation.name}:`, error);
         }
       }
       
+      console.log(`\n=== RETARGETING COMPLETE: ${retargetedAnimations.length}/${selectedAnimations.length} successful ===\n`);
+      
       if (retargetedAnimations.length > 0) {
         selectedAnimations = retargetedAnimations;
-        this.showNotification(
-          `Retargeted ${retargetedAnimations.length} animation(s)`,
-          'success'
-        );
+        
+        // Show detailed notification
+        let message = `Retargeted ${retargetedAnimations.length} animation(s)`;
+        if (applyRestPoseCorrection) {
+          message += ' with rest pose correction';
+        }
+        if (retargetedAnimations.length < selectedAnimations.length) {
+          message += ` (${selectedAnimations.length - retargetedAnimations.length} failed)`;
+        }
+        
+        this.showNotification(message, 'success', 8000);
+        
+        // Add helpful tip
+        if (applyRestPoseCorrection) {
+          this.showNotification(
+            '💡 If the animation still looks wrong, try disabling "Rest Pose Correction" and re-import.',
+            'info',
+            10000
+          );
+        }
       } else {
-        this.showNotification('Failed to retarget animations', 'error');
+        this.showNotification('Failed to retarget animations. Check the console for details.', 'error');
         return;
       }
     }
@@ -1164,13 +1467,22 @@ export class UIManager {
     document.getElementById('add-animation-modal').classList.remove('is-active');
   }
   
-  retargetAnimationForCurrentModel(sourceClip) {
+  retargetAnimationForCurrentModel(sourceClip, boneMapping, preserveHipPosition = false, restPoseOffsets = null) {
     // Clone the animation clip
     const newClip = sourceClip.clone();
     newClip.name = sourceClip.name;
     
+    console.log(`  Retargeting clip: ${sourceClip.name}`);
+    
+    // Identify root/hip bones (common names)
+    const rootBonePatterns = /^(hips?|pelvis|root|spine_?0?0?1?)$/i;
+    
     // Remap track names based on bone mapping
     const newTracks = [];
+    let mappedCount = 0;
+    let unmappedCount = 0;
+    let skippedRootCount = 0;
+    let correctedCount = 0;
     
     for (const track of newClip.tracks) {
       // Extract bone name from track name (format: boneName.property)
@@ -1178,23 +1490,137 @@ export class UIManager {
       const boneName = trackParts.slice(0, -1).join('.');
       const property = trackParts[trackParts.length - 1];
       
+      // Check if this is a root/hip bone and if we should preserve its position
+      const isRootBone = rootBonePatterns.test(boneName);
+      const isPositionTrack = property === 'position';
+      
+      if (isRootBone && isPositionTrack && !preserveHipPosition) {
+        // Skip root position tracks to prevent model from moving incorrectly
+        console.log(`    ⊗ Skipped root position track: ${track.name} (to prevent position issues)`);
+        skippedRootCount++;
+        continue;
+      }
+      
       // Check if this bone is mapped
-      const mappedBone = this.inlineBoneMapping[boneName];
+      const mappedBone = boneMapping[boneName];
       
       if (mappedBone) {
         // Create new track with mapped bone name
         const newTrackName = `${mappedBone}.${property}`;
         const TrackType = track.constructor;
-        const newTrack = new TrackType(newTrackName, track.times, track.values);
+        let newTrack;
+        
+        // Apply rest pose correction if available and this is a quaternion rotation track
+        if (restPoseOffsets && property === 'quaternion' && restPoseOffsets[mappedBone]) {
+          newTrack = this.applyRestPoseOffset(track, restPoseOffsets[mappedBone], newTrackName);
+          correctedCount++;
+        } else {
+          newTrack = new TrackType(newTrackName, track.times, track.values);
+        }
+        
         newTracks.push(newTrack);
+        mappedCount++;
       } else {
-        // Keep original track if no mapping found
+        // Keep original track if no mapping found (might still work if bone names match)
         newTracks.push(track);
+        unmappedCount++;
       }
+    }
+    
+    console.log(`    Summary: ${mappedCount} mapped, ${unmappedCount} unmapped, ${skippedRootCount} root skipped, ${correctedCount} pose-corrected`);
+    
+    if (newTracks.length === 0) {
+      console.error('    ✗ No tracks remained after retargeting!');
+      return null;
     }
     
     newClip.tracks = newTracks;
     return newClip;
+  }
+  
+  calculateRestPoseOffsets(currentModel, animationData, sampleAnimation, boneMapping) {
+    const offsets = {};
+    
+    // Get rest pose rotations from current model
+    const currentRestPoses = {};
+    currentModel.traverse((bone) => {
+      if (bone.isBone || bone.type === 'Bone') {
+        currentRestPoses[bone.name] = bone.quaternion.clone();
+      }
+    });
+    
+    console.log('  Current model rest poses:', Object.keys(currentRestPoses).length, 'bones');
+    
+    // Extract first frame rotations from animation (represents animation's rest pose)
+    const animRestPoses = {};
+    sampleAnimation.tracks.forEach((track) => {
+      const trackParts = track.name.split('.');
+      const boneName = trackParts.slice(0, -1).join('.');
+      const property = trackParts[trackParts.length - 1];
+      
+      if (property === 'quaternion' && track.values.length >= 4) {
+        // Get first keyframe (rest pose)
+        animRestPoses[boneName] = new THREE.Quaternion(
+          track.values[0],
+          track.values[1],
+          track.values[2],
+          track.values[3]
+        );
+      }
+    });
+    
+    console.log('  Animation rest poses extracted:', Object.keys(animRestPoses).length, 'bones');
+    
+    // Calculate offsets for mapped bones
+    let offsetsCalculated = 0;
+    Object.entries(boneMapping).forEach(([animBone, currentBone]) => {
+      if (currentRestPoses[currentBone] && animRestPoses[animBone]) {
+        // Calculate the rotational difference
+        // offset = currentRest * inverse(animRest)
+        const animRestInverse = animRestPoses[animBone].clone().invert();
+        const offset = currentRestPoses[currentBone].clone().multiply(animRestInverse);
+        
+        offsets[currentBone] = offset;
+        offsetsCalculated++;
+        
+        // Log significant offsets
+        const angle = 2 * Math.acos(Math.min(1, Math.abs(offset.w)));
+        if (angle > 0.1) { // More than ~5.7 degrees
+          console.log(`    Offset for ${currentBone}: ${(angle * 180 / Math.PI).toFixed(1)}°`);
+        }
+      }
+    });
+    
+    console.log(`  Calculated ${offsetsCalculated} rest pose offsets`);
+    
+    return offsets;
+  }
+  
+  applyRestPoseOffset(track, offset, newTrackName) {
+    const TrackType = track.constructor;
+    
+    // Create new values array with offset applied
+    const newValues = new Float32Array(track.values.length);
+    
+    // Apply offset to each quaternion keyframe
+    for (let i = 0; i < track.values.length; i += 4) {
+      const originalQuat = new THREE.Quaternion(
+        track.values[i],
+        track.values[i + 1],
+        track.values[i + 2],
+        track.values[i + 3]
+      );
+      
+      // Apply offset: newQuat = offset * originalQuat
+      const correctedQuat = offset.clone().multiply(originalQuat);
+      
+      newValues[i] = correctedQuat.x;
+      newValues[i + 1] = correctedQuat.y;
+      newValues[i + 2] = correctedQuat.z;
+      newValues[i + 3] = correctedQuat.w;
+    }
+    
+    return new TrackType(newTrackName, track.times, newValues);
   }
 
   /**
@@ -1243,7 +1669,19 @@ export class UIManager {
     // Material header
     const header = document.createElement('div');
     header.className = 'material-header';
-    header.innerHTML = `<div class="material-name">${materialData.name}</div>`;
+    header.innerHTML = `
+      <div class="material-name">${materialData.name}</div>
+      <span class="material-toggle">▼</span>
+    `;
+    header.style.cursor = 'pointer';
+    
+    // Add click handler for collapse/expand
+    header.addEventListener('click', () => {
+      const isCollapsed = card.classList.toggle('collapsed');
+      const toggle = header.querySelector('.material-toggle');
+      toggle.textContent = isCollapsed ? '▶' : '▼';
+    });
+    
     card.appendChild(header);
 
     // Texture slots container
