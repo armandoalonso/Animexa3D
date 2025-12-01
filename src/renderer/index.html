@@ -564,6 +564,14 @@
             </label>
             <p class="help">Include parent object transforms (recommended)</p>
           </div>
+          
+          <div class="field">
+            <label class="checkbox">
+              <input type="checkbox" id="preserve-root-motion" checked />
+              Preserve Root Motion
+            </label>
+            <p class="help">Keep root/hip position and movement from the source animation (important for walk cycles, running, etc.)</p>
+          </div>
         </div>
 
         <!-- Animation Selection -->
@@ -640,6 +648,27 @@
       </section>
       <footer class="modal-card-foot">
         <button id="btn-confirm-save-camera-preset" class="button is-success">Save</button>
+        <button class="button">Cancel</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Rename Animation Modal -->
+  <div id="rename-animation-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title">Rename Animation</p>
+        <button class="delete" aria-label="close"></button>
+      </header>
+      <section class="modal-card-body">
+        <div class="field">
+          <label class="label">Animation Name</label>
+          <input type="text" id="rename-animation-input" class="input" placeholder="Enter animation name">
+        </div>
+      </section>
+      <footer class="modal-card-foot">
+        <button id="btn-confirm-rename-animation" class="button is-success">Rename</button>
         <button class="button">Cancel</button>
       </footer>
     </div>
@@ -735,10 +764,10 @@
               <div class="field" style="margin-top: 1rem;">
                 <label class="label is-small">Retargeting Options</label>
                 <label class="checkbox">
-                  <input type="checkbox" id="preserve-hip-position">
-                  Preserve Hip/Root Position
+                  <input type="checkbox" id="preserve-hip-position-inline" checked>
+                  Preserve Root Motion
                 </label>
-                <p class="help">Keep the original hip/root motion from the animation</p>
+                <p class="help">Keep root/hip position and movement from the animation (important for walk cycles, running, etc.)</p>
                 
                 <label class="checkbox" style="margin-top: 0.5rem;">
                   <input type="checkbox" id="apply-rest-pose-correction" checked>

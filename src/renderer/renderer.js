@@ -113,9 +113,49 @@ viewportContainer.addEventListener('drop', async (e) => {
             projectData.model.fileName
           );
 
-          // Load animations
+          // Load animations from saved project data (not from model)
           if (projectData.animations && projectData.animations.length > 0) {
-            animationManager.loadAnimations(modelData.animations || []);
+            // Restore animations from saved project data (including added/renamed animations)
+            const restoredAnimations = projectData.animations.map(savedClip => {
+              const tracks = savedClip.tracks.map(savedTrack => {
+                const times = new Float32Array(savedTrack.times);
+                const values = new Float32Array(savedTrack.values);
+                
+                // Reconstruct the appropriate track type
+                let TrackConstructor;
+                switch (savedTrack.type) {
+                  case 'VectorKeyframeTrack':
+                    TrackConstructor = THREE.VectorKeyframeTrack;
+                    break;
+                  case 'QuaternionKeyframeTrack':
+                    TrackConstructor = THREE.QuaternionKeyframeTrack;
+                    break;
+                  case 'NumberKeyframeTrack':
+                    TrackConstructor = THREE.NumberKeyframeTrack;
+                    break;
+                  case 'ColorKeyframeTrack':
+                    TrackConstructor = THREE.ColorKeyframeTrack;
+                    break;
+                  case 'BooleanKeyframeTrack':
+                    TrackConstructor = THREE.BooleanKeyframeTrack;
+                    break;
+                  case 'StringKeyframeTrack':
+                    TrackConstructor = THREE.StringKeyframeTrack;
+                    break;
+                  default:
+                    TrackConstructor = THREE.KeyframeTrack;
+                }
+                
+                return new TrackConstructor(savedTrack.name, times, values);
+              });
+              
+              return new THREE.AnimationClip(savedClip.name, savedClip.duration, tracks);
+            });
+            
+            animationManager.loadAnimations(restoredAnimations);
+          } else if (modelData.animations && modelData.animations.length > 0) {
+            // Fallback to model's original animations if no saved animations
+            animationManager.loadAnimations(modelData.animations);
           } else {
             animationManager.loadAnimations([]);
           }

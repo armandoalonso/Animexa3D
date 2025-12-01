@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 export class ProjectManager {
   constructor(sceneManager, modelLoader, animationManager, textureManager) {
     this.sceneManager = sceneManager;
@@ -32,11 +34,19 @@ export class ProjectManager {
         },
         
         // Animations (including added animations)
-        animations: this.animationManager.getAnimations().map(clip => ({
-          name: clip.name,
-          duration: clip.duration,
-          // Animation data will be serialized on save
-        })),
+        animations: this.animationManager.getAnimations().map(clip => {
+          console.log('Saving animation:', clip.name);
+          return {
+            name: clip.name,
+            duration: clip.duration,
+            tracks: clip.tracks.map(track => ({
+              name: track.name,
+              times: Array.from(track.times),
+              values: Array.from(track.values),
+              type: track.constructor.name // VectorKeyframeTrack, QuaternionKeyframeTrack, etc.
+            }))
+          };
+        }),
         
         // Textures and materials
         materials: this.textureManager.getMaterials().map(material => ({
@@ -110,15 +120,12 @@ export class ProjectManager {
       if (result.success) {
         return true;
       } else {
-        throw new Error(result.error || 'Failed to load project');
+        throw new Error(result.error || 'Failed to save project');
       }
       
     } catch (error) {
-      console.error('Error loading project:', error);
+      console.error('Error saving project:', error);
       throw error;
-    } finally {
-      // Hide loading overlay after everything is done
-      loadingOverlay.classList.remove('active');
     }
   }
 
@@ -164,9 +171,53 @@ export class ProjectManager {
 
         // 2. Load animations
         if (projectData.animations && projectData.animations.length > 0) {
-          // The animations are already part of the model data, but we might have added animations
-          // For now, we'll use the model's animations
-          this.animationManager.loadAnimations(modelData.animations || []);
+          console.log('Loading animations from project data:', projectData.animations.map(a => a.name));
+          
+          // Restore animations from saved project data (including added/renamed animations)
+          const restoredAnimations = projectData.animations.map(savedClip => {
+            const tracks = savedClip.tracks.map(savedTrack => {
+              const times = new Float32Array(savedTrack.times);
+              const values = new Float32Array(savedTrack.values);
+              
+              // Reconstruct the appropriate track type
+              let TrackConstructor;
+              switch (savedTrack.type) {
+                case 'VectorKeyframeTrack':
+                  TrackConstructor = THREE.VectorKeyframeTrack;
+                  break;
+                case 'QuaternionKeyframeTrack':
+                  TrackConstructor = THREE.QuaternionKeyframeTrack;
+                  break;
+                case 'NumberKeyframeTrack':
+                  TrackConstructor = THREE.NumberKeyframeTrack;
+                  break;
+                case 'ColorKeyframeTrack':
+                  TrackConstructor = THREE.ColorKeyframeTrack;
+                  break;
+                case 'BooleanKeyframeTrack':
+                  TrackConstructor = THREE.BooleanKeyframeTrack;
+                  break;
+                case 'StringKeyframeTrack':
+                  TrackConstructor = THREE.StringKeyframeTrack;
+                  break;
+                default:
+                  TrackConstructor = THREE.KeyframeTrack;
+              }
+              
+              return new TrackConstructor(savedTrack.name, times, values);
+            });
+            
+            const clip = new THREE.AnimationClip(savedClip.name, savedClip.duration, tracks);
+            console.log('Restored animation clip:', clip.name);
+            return clip;
+          });
+          
+          console.log('Calling loadAnimations with:', restoredAnimations.map(a => a.name));
+          // Load the restored animations
+          this.animationManager.loadAnimations(restoredAnimations);
+        } else if (modelData.animations && modelData.animations.length > 0) {
+          // Fallback to model's original animations if no saved animations
+          this.animationManager.loadAnimations(modelData.animations);
         } else {
           this.animationManager.loadAnimations([]);
         }

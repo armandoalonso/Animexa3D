@@ -11,6 +11,7 @@ export class AnimationManager {
   }
   
   loadAnimations(animations) {
+    console.log('AnimationManager.loadAnimations called with:', animations.map(a => a.name));
     this.animations = animations;
     this.currentAction = null;
     this.currentAnimationIndex = -1;
@@ -18,6 +19,7 @@ export class AnimationManager {
     
     this.populateAnimationList();
     this.updateTimelineUI();
+    console.log('After loading, this.animations:', this.animations.map(a => a.name));
   }
   
   populateAnimationList() {
@@ -32,31 +34,44 @@ export class AnimationManager {
     this.animations.forEach((clip, index) => {
       const container = document.createElement('div');
       container.className = 'animation-list-item';
-      container.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;';
       
       const button = document.createElement('button');
       button.className = 'button is-fullwidth animation-item';
-      button.style.cssText = 'flex: 1;';
       button.innerHTML = `
-        <div style="text-align: left; width: 100%;">
-          <div><strong>${clip.name || `Animation ${index + 1}`}</strong></div>
+        <div style="text-align: left; width: 100%; overflow: hidden;">
+          <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><strong>${clip.name || `Animation ${index + 1}`}</strong></div>
           <div style="font-size: 0.8rem; opacity: 0.7;">${clip.duration.toFixed(2)}s</div>
         </div>
       `;
       button.onclick = () => this.playAnimation(index);
       
+      const buttonsContainer = document.createElement('div');
+      buttonsContainer.style.cssText = 'display: flex; gap: 0.25rem;';
+      
+      const renameBtn = document.createElement('button');
+      renameBtn.className = 'button is-info is-small';
+      renameBtn.style.cssText = 'flex: 1;';
+      renameBtn.innerHTML = '✎ Rename';
+      renameBtn.title = 'Rename animation';
+      renameBtn.onclick = (e) => {
+        e.stopPropagation();
+        this.openRenameModal(index);
+      };
+      
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'button is-danger is-small';
-      deleteBtn.style.cssText = 'flex-shrink: 0;';
-      deleteBtn.innerHTML = '✕';
+      deleteBtn.style.cssText = 'flex: 1;';
+      deleteBtn.innerHTML = '✕ Delete';
       deleteBtn.title = 'Remove animation';
       deleteBtn.onclick = (e) => {
         e.stopPropagation();
         this.removeAnimation(index);
       };
       
+      buttonsContainer.appendChild(renameBtn);
+      buttonsContainer.appendChild(deleteBtn);
       container.appendChild(button);
-      container.appendChild(deleteBtn);
+      container.appendChild(buttonsContainer);
       animationList.appendChild(container);
     });
   }
@@ -355,6 +370,84 @@ export class AnimationManager {
     }
     
     return this.animations.length;
+  }
+  
+  /**
+   * Open rename modal for animation
+   */
+  openRenameModal(index) {
+    if (index < 0 || index >= this.animations.length) {
+      return;
+    }
+    
+    const clip = this.animations[index];
+    const modal = document.getElementById('rename-animation-modal');
+    const input = document.getElementById('rename-animation-input');
+    
+    // Set current name
+    input.value = clip.name || `Animation ${index + 1}`;
+    input.dataset.animationIndex = index;
+    
+    // Open modal
+    modal.classList.add('is-active');
+    
+    // Focus input after a short delay
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 100);
+    
+    // Add Enter key listener (remove old one first)
+    const newInput = input.cloneNode(true);
+    input.parentNode.replaceChild(newInput, input);
+    
+    newInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('btn-confirm-rename-animation').click();
+      }
+    });
+  }
+  
+  /**
+   * Rename animation
+   */
+  renameAnimation(index, newName) {
+    if (index < 0 || index >= this.animations.length) {
+      return false;
+    }
+    
+    if (!newName || newName.trim() === '') {
+      if (window.uiManager) {
+        window.uiManager.showNotification('Animation name cannot be empty', 'warning');
+      }
+      return false;
+    }
+    
+    const oldName = this.animations[index].name;
+    const trimmedName = newName.trim();
+    
+    // Update the animation clip name directly
+    this.animations[index].name = trimmedName;
+    
+    // If this is the currently playing animation, update the action's clip reference
+    if (this.currentAction && this.currentAnimationIndex === index) {
+      // The action uses the same clip object, so the name is already updated
+      // No need to recreate the action
+    }
+    
+    // Update UI
+    this.populateAnimationList();
+    
+    // Show notification
+    if (window.uiManager) {
+      window.uiManager.showNotification(
+        `Renamed: "${oldName}" → "${trimmedName}"`,
+        'success'
+      );
+    }
+    
+    return true;
   }
   
   /**

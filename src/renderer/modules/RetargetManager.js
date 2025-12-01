@@ -1051,40 +1051,42 @@ export class RetargetManager {
     const srcValues = srcTrack.values;
     const trgValues = new Float32Array(srcValues.length);
     
-    // Only retarget root bone position
-    if (boneIndex === 0) {
-      const srcBindPos = this.srcBindPose.bones[boneIndex].getWorldPosition(new THREE.Vector3());
-      const trgBindPos = this.trgBindPose.bones[boneIndex].getWorldPosition(new THREE.Vector3());
+    // Find target bone index
+    const targetBoneIndex = this.findIndexOfBoneByName(trgSkeleton, targetBoneName);
+    
+    if (targetBoneIndex < 0) {
+      return null;
+    }
+    
+    // Get bind poses
+    const srcBindPos = this.srcBindPose.bones[boneIndex].getWorldPosition(new THREE.Vector3());
+    const trgBindPos = this.trgBindPose.bones[targetBoneIndex].getWorldPosition(new THREE.Vector3());
+    
+    const pos = new THREE.Vector3();
+    const diffPosition = new THREE.Vector3();
+    
+    for (let i = 0; i < srcValues.length; i += 3) {
+      pos.set(srcValues[i], srcValues[i + 1], srcValues[i + 2]);
       
-      const pos = new THREE.Vector3();
-      const diffPosition = new THREE.Vector3();
-      
-      for (let i = 0; i < srcValues.length; i += 3) {
-        pos.set(srcValues[i], srcValues[i + 1], srcValues[i + 2]);
-        
-        // Apply embedded transforms if needed
-        if (this.srcBindPose.transformsWorldEmbedded) {
-          pos.applyQuaternion(this.srcBindPose.transformsWorldEmbedded.forward.q);
-        }
-        
-        diffPosition.subVectors(pos, srcBindPos);
-        
-        // Scale the position by proportion ratio
-        diffPosition.multiplyScalar(this.proportionRatio);
-        
-        if (this.trgBindPose.transformsWorldEmbedded) {
-          diffPosition.applyQuaternion(this.trgBindPose.transformsWorldEmbedded.inverse.q);
-        }
-        
-        diffPosition.add(trgBindPos);
-        
-        trgValues[i] = diffPosition.x;
-        trgValues[i + 1] = diffPosition.y;
-        trgValues[i + 2] = diffPosition.z;
+      // Apply embedded transforms if needed
+      if (this.srcBindPose.transformsWorldEmbedded) {
+        pos.applyQuaternion(this.srcBindPose.transformsWorldEmbedded.forward.q);
       }
-    } else {
-      // For non-root bones, copy positions as-is (usually not animated)
-      trgValues.set(srcValues);
+      
+      diffPosition.subVectors(pos, srcBindPos);
+      
+      // Scale the position by proportion ratio
+      diffPosition.multiplyScalar(this.proportionRatio);
+      
+      if (this.trgBindPose.transformsWorldEmbedded) {
+        diffPosition.applyQuaternion(this.trgBindPose.transformsWorldEmbedded.inverse.q);
+      }
+      
+      diffPosition.add(trgBindPos);
+      
+      trgValues[i] = diffPosition.x;
+      trgValues[i + 1] = diffPosition.y;
+      trgValues[i + 2] = diffPosition.z;
     }
     
     return new THREE.VectorKeyframeTrack(
@@ -1160,7 +1162,7 @@ export class RetargetManager {
    * @param {THREE.AnimationClip} sourceClip - Source animation clip
    * @returns {THREE.AnimationClip|null} - Retargeted animation clip or null
    */
-  retargetAnimation(sourceClip) {
+  retargetAnimation(sourceClip, preserveRootMotion = true) {
     if (!this.sourceModel || !this.targetModel) {
       window.uiManager.showNotification('Please load both source and target models', 'error');
       return null;
@@ -1176,6 +1178,7 @@ export class RetargetManager {
     
     console.log('🎯 Starting retargeting with', Object.keys(this.boneMapping).length, 'bone mappings');
     console.log('Bone mappings:', this.boneMapping);
+    console.log('Preserve root motion:', preserveRootMotion);
     
     try {
       // Initialize retargeting if not done
@@ -1187,17 +1190,45 @@ export class RetargetManager {
       const trgTracks = [];
       const srcTracks = sourceClip.tracks;
       
+      // Identify root bone patterns
+      const rootBonePatterns = /^(hips?|pelvis|root|spine_?0?0?1?|mixamorig:hips)$/i;
+      
       console.log('📊 Processing', srcTracks.length, 'animation tracks');
       let skippedCount = 0;
       let retargetedCount = 0;
+      let rootTracksCount = 0;
       
       for (let i = 0; i < srcTracks.length; i++) {
         const track = srcTracks[i];
         let newTrack = null;
         
+        // Extract bone name from track
+        const trackParts = track.name.split('.');
+        const boneName = trackParts.slice(0, -1).join('.');
+        const property = trackParts[trackParts.length - 1];
+        
+        // Check if this is a root bone
+        const isRootBone = rootBonePatterns.test(boneName);
+        const isPositionTrack = property === 'position';
+        
         // Check track type and retarget accordingly
-        if (track.name.endsWith('.position') && track.name.includes(srcSkeleton.bones[0].name)) {
-          newTrack = this.retargetPositionTrack(track);
+        if (isPositionTrack) {
+          // Only process position tracks for root bone when preserveRootMotion is enabled
+          if (isRootBone && preserveRootMotion) {
+            newTrack = this.retargetPositionTrack(track);
+            rootTracksCount++;
+            console.log(`  ✓ Root motion preserved: ${track.name}`);
+          } else if (isRootBone) {
+            // Skip root position to prevent unwanted movement
+            console.log(`  ⊗ Root position skipped: ${track.name}`);
+            skippedCount++;
+            continue;
+          } else {
+            // Skip non-root position tracks entirely - these shouldn't be animated
+            console.log(`  ⊗ Non-root position skipped: ${track.name}`);
+            skippedCount++;
+            continue;
+          }
         } else if (track.name.endsWith('.quaternion')) {
           newTrack = this.retargetQuaternionTrack(track);
         } else if (track.name.endsWith('.scale')) {
@@ -1215,7 +1246,7 @@ export class RetargetManager {
         }
       }
       
-      console.log(`✅ Retargeted ${retargetedCount} tracks, ❌ Skipped ${skippedCount} tracks`);
+      console.log(`✅ Retargeted ${retargetedCount} tracks (${rootTracksCount} root motion), ❌ Skipped ${skippedCount} tracks`);
       
       if (trgTracks.length === 0) {
         console.error('❌ No tracks were successfully retargeted!');

@@ -89,6 +89,9 @@ export class UIManager {
     // Camera preset modal
     document.getElementById('btn-confirm-save-camera-preset').addEventListener('click', () => this.handleConfirmSaveCameraPreset());
     
+    // Rename animation modal
+    document.getElementById('btn-confirm-rename-animation').addEventListener('click', () => this.handleConfirmRenameAnimation());
+    
     // Add Animation modal
     document.getElementById('btn-load-animation-file').addEventListener('click', () => this.handleLoadAnimationFile());
     document.getElementById('btn-add-selected-animations').addEventListener('click', () => this.handleAddSelectedAnimations());
@@ -964,6 +967,7 @@ export class UIManager {
     const targetPoseMode = parseInt(document.getElementById('target-pose-mode').value);
     const applyTPose = document.getElementById('apply-tpose').checked;
     const embedTransforms = document.getElementById('embed-transforms').checked;
+    const preserveRootMotion = document.getElementById('preserve-root-motion').checked;
     
     console.log('Retargeting with options:', {
       sourceAnimationCount: sourceModelData.animations.length,
@@ -972,7 +976,8 @@ export class UIManager {
       sourcePoseMode,
       targetPoseMode,
       applyTPose,
-      embedTransforms
+      embedTransforms,
+      preserveRootMotion
     });
     
     // Apply T-pose normalization BEFORE initializing if requested
@@ -1038,7 +1043,7 @@ export class UIManager {
       const clip = animations[index];
       if (clip) {
         console.log(`Retargeting clip ${index}: ${clip.name}`);
-        const retargetedClip = this.retargetManager.retargetAnimation(clip);
+        const retargetedClip = this.retargetManager.retargetAnimation(clip, preserveRootMotion);
         if (retargetedClip) {
           // Check if there's a rename input for this animation
           const renameInput = document.querySelector(`.retarget-animation-rename-input[data-index="${index}"]`);
@@ -1749,11 +1754,13 @@ export class UIManager {
     // If retargeting is active and we have mappings, use robust retargeting
     if (this.inlineRetargetingActive && Object.keys(this.inlineBoneMapping).length > 0) {
       const currentModel = this.modelLoader.getCurrentModelData();
+      const preserveRootMotion = document.getElementById('preserve-hip-position-inline').checked;
       
       console.log('=== ROBUST RETARGETING ANIMATION ===');
       console.log('Bone mapping (current->anim):', this.inlineBoneMapping);
       console.log('Animation bones:', this.loadedAnimationData.boneNames);
       console.log('Current model bones:', currentModel.skeletons.boneNames);
+      console.log('Preserve root motion:', preserveRootMotion);
       
       // Invert the bone mapping for retargeting
       // inlineBoneMapping is: currentModelBone -> animBone
@@ -1793,7 +1800,7 @@ export class UIManager {
             console.log(`  Original tracks: ${animation.tracks.length}`);
             
             // Use robust retargeting algorithm
-            const retargetedClip = this.retargetManager.retargetAnimation(animation);
+            const retargetedClip = this.retargetManager.retargetAnimation(animation, preserveRootMotion);
             
             if (retargetedClip) {
               console.log(`  ✓ Retargeted tracks: ${retargetedClip.tracks.length}`);
@@ -2479,6 +2486,33 @@ export class UIManager {
     const customSection = dropdown.closest('.control-section');
     if (presetNames.length === 0) {
       // Still show it, but user will see "Select Custom View..." as the only option
+    }
+  }
+
+  /**
+   * Rename Animation Handlers
+   */
+
+  /**
+   * Confirm and rename the animation with the entered name
+   */
+  handleConfirmRenameAnimation() {
+    const input = document.getElementById('rename-animation-input');
+    const newName = input.value.trim();
+    const index = parseInt(input.dataset.animationIndex);
+
+    if (!newName) {
+      this.showNotification('Please enter a name for the animation', 'warning');
+      return;
+    }
+
+    const success = this.animationManager.renameAnimation(index, newName);
+
+    if (success) {
+      // Close modal
+      document.getElementById('rename-animation-modal').classList.remove('is-active');
+      input.value = '';
+      delete input.dataset.animationIndex;
     }
   }
 }

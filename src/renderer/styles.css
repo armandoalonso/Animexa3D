@@ -226,6 +226,7 @@ html, body {
   flex: 1;
   padding: 0.5rem;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .animation-list .empty-state {
@@ -234,8 +235,14 @@ html, body {
   color: #6c757d;
 }
 
+.animation-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
 .animation-item {
-  margin-bottom: 0.5rem;
   padding: 0.75rem;
   background: #f8f9fa;
   border: 1px solid #e0e6ed;
@@ -243,6 +250,8 @@ html, body {
   cursor: pointer;
   transition: all 0.2s ease;
   color: #495057;
+  width: 100%;
+  overflow: hidden;
 }
 
 .animation-item:hover {
