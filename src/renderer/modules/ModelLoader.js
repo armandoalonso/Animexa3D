@@ -108,13 +108,30 @@ export class ModelLoader {
   
   extractSkeletons(model) {
     const skeletons = [];
+    const bonesSet = new Set();
     const bones = [];
     
     model.traverse((child) => {
       if (child.isSkinnedMesh && child.skeleton) {
-        skeletons.push(child.skeleton);
-        bones.push(...child.skeleton.bones);
+        // Only add skeleton if not already added
+        if (!skeletons.includes(child.skeleton)) {
+          skeletons.push(child.skeleton);
+        }
+        
+        // Add bones without duplicates
+        child.skeleton.bones.forEach(bone => {
+          if (!bonesSet.has(bone)) {
+            bonesSet.add(bone);
+            bones.push(bone);
+          }
+        });
       }
+    });
+    
+    console.log('extractSkeletons:', {
+      skeletonsFound: skeletons.length,
+      bonesFound: bones.length,
+      hasMesh: model.traverse ? 'yes' : 'no'
     });
     
     return {
@@ -212,21 +229,42 @@ export class ModelLoader {
       
       modelData.filename = filename;
       
+      // Try to extract skeletons from skinned meshes first
+      let skeletons = modelData.skeletons;
+      
+      console.log('loadAnimationFile initial extraction:', {
+        filename,
+        skeletonCount: skeletons.skeletons?.length || 0,
+        boneCount: skeletons.boneNames?.length || 0,
+        animationCount: modelData.animations?.length || 0
+      });
+      
       // If no bones found in skeletons (animation files often don't have skinned meshes),
       // extract all bones from the hierarchy
-      let skeletons = modelData.skeletons;
       if (!skeletons.boneNames || skeletons.boneNames.length === 0) {
         console.log('No bones found in skinned meshes, extracting from hierarchy...');
         skeletons = this.extractAllBones(modelData.model);
         console.log('Found bones in hierarchy:', skeletons.boneNames.length);
+      } else {
+        console.log('Using bones from skinned mesh:', skeletons.boneNames.length);
       }
       
-      return {
+      const result = {
         filename: filename,
         animations: modelData.animations || [],
         skeletons: skeletons,
-        boneNames: skeletons.boneNames || []
+        boneNames: skeletons.boneNames || [],
+        model: modelData.model // Store the model for retargeting
       };
+      
+      console.log('loadAnimationFile result:', {
+        filename: result.filename,
+        animations: result.animations.length,
+        bones: result.boneNames.length,
+        hasModel: !!result.model
+      });
+      
+      return result;
       
     } catch (error) {
       console.error('Error loading animation file:', error);

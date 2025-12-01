@@ -385,29 +385,38 @@
       <section class="modal-card-body">
         <!-- Model Selection -->
         <div class="notification is-info is-light">
-          <p><strong>Instructions:</strong> Load a second model to use as the retarget destination. The current model will be the source.</p>
+          <p><strong>Instructions:</strong> Your current model will <strong>receive</strong> animations. Load a source model that <strong>has</strong> the animations you want to transfer.</p>
         </div>
         
         <div class="field">
-          <label class="label">Load Target Model</label>
-          <button id="btn-load-target-model" class="button is-primary">
-            <span class="icon">📂</span>
-            <span>Load Target Model</span>
-          </button>
+          <label class="label">Load Source Model (with animations)</label>
+          <div id="retarget-drop-zone" class="retarget-drop-zone">
+            <button id="btn-load-target-model" class="button is-primary">
+              <span class="icon">📂</span>
+              <span>Browse Source Model</span>
+            </button>
+            <p class="help has-text-centered" style="margin-top: 0.5rem;">or drag and drop a model file here</p>
+            <div id="retarget-drop-overlay" class="retarget-drop-overlay">
+              <div class="retarget-drop-content">
+                <p class="title is-5">Drop Source Model</p>
+                <p class="subtitle is-6">FBX, GLB, GLTF</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Rig Type Info -->
         <div class="columns" style="margin-top: 1rem;">
           <div class="column">
             <div class="box">
-              <p class="label">Source Model</p>
+              <p class="label">Target Model (Your Loaded Model)</p>
               <p><strong>Rig Type:</strong> <span id="source-rig-type">-</span></p>
               <p><strong>Bones:</strong> <span id="source-bone-count">-</span></p>
             </div>
           </div>
           <div class="column">
             <div class="box">
-              <p class="label">Target Model</p>
+              <p class="label">Source Model (Animation Provider)</p>
               <p><strong>Rig Type:</strong> <span id="target-rig-type">-</span></p>
               <p><strong>Bones:</strong> <span id="target-bone-count">-</span></p>
             </div>
@@ -451,31 +460,31 @@
         <!-- Bone Trees -->
         <div class="columns" style="margin-top: 1rem;">
           <div class="column">
-            <label class="label">Source Skeleton</label>
+            <label class="label">Target Skeleton (Your Model - Receives Animations)</label>
             <div id="source-bone-tree" class="bone-tree-container">
-              <p class="has-text-grey">Load a model to see bones</p>
+              <p class="has-text-grey">Current model skeleton shown here</p>
             </div>
           </div>
           <div class="column">
-            <label class="label">Target Skeleton</label>
+            <label class="label">Source Skeleton (Provides Animations)</label>
             <div id="target-bone-tree" class="bone-tree-container">
-              <p class="has-text-grey">Load target model to see bones</p>
+              <p class="has-text-grey">Load source model to see bones</p>
             </div>
           </div>
         </div>
 
         <!-- Manual Mapping Controls -->
         <div class="box" style="margin-top: 1rem;">
-          <p class="label">Manual Mapping</p>
+          <p class="label">Manual Mapping (Target ← Source)</p>
           <div class="field is-grouped">
             <div class="control is-expanded">
-              <input type="text" id="selected-source-bone" class="input" readonly placeholder="Click source bone...">
+              <input type="text" id="selected-source-bone" class="input" readonly placeholder="Click target bone (your model)...">
             </div>
             <div class="control">
-              <button id="btn-create-mapping" class="button is-primary" disabled>→</button>
+              <button id="btn-create-mapping" class="button is-primary" disabled>←</button>
             </div>
             <div class="control is-expanded">
-              <input type="text" id="selected-target-bone" class="input" readonly placeholder="Click target bone...">
+              <input type="text" id="selected-target-bone" class="input" readonly placeholder="Click source bone...">
             </div>
           </div>
         </div>

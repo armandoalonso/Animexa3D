@@ -6,6 +6,7 @@ A desktop application for viewing, playing, and exporting 3D animated models wit
 
 - **Model Loading**: Support for GLB, GLTF, and FBX formats
 - **Animation Playback**: Play, pause, stop, and loop animations with timeline scrubbing
+- **Animation Retargeting**: Transfer animations between different character rigs with robust bone mapping
 - **Frame Export**: Export animations as PNG image sequences (24/30/60 FPS or custom)
 - **Scene Controls**: Adjust background color, lighting, camera presets, and grid visibility
 - **Drag & Drop**: Simple file loading via drag and drop
@@ -66,6 +67,17 @@ npm run package
 - **Grid**: Toggle grid visibility (hidden during export)
 - **Lighting**: Adjust directional and ambient light position and intensity
 
+### Animation Retargeting
+1. Load a source model with animations
+2. Load a target model (different rig)
+3. Open the Retarget panel
+4. Click "Auto-Map Bones" for automatic bone detection
+5. Review and adjust bone mappings manually if needed
+6. Select animations to retarget
+7. The retargeted animations will be applied to the target model
+
+For detailed information on the retargeting algorithm, see [Retargeting Algorithm Documentation](docs/retargeting-algorithm.md).
+
 ### Keyboard Shortcuts
 - `Space` - Play/Pause animation
 - `L` - Toggle loop mode
@@ -92,8 +104,13 @@ npm run package
 │           ├── SceneManager.js
 │           ├── ModelLoader.js
 │           ├── AnimationManager.js
+│           ├── RetargetManager.js   # NEW: Robust retargeting
 │           ├── ExportManager.js
-│           └── UIManager.js
+│           ├── UIManager.js
+│           ├── ProjectManager.js
+│           └── TextureManager.js
+├── docs/
+│   └── retargeting-algorithm.md    # Retargeting documentation
 ├── package.json
 ├── vite.config.js
 └── README.md

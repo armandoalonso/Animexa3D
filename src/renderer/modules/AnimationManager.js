@@ -30,8 +30,13 @@ export class AnimationManager {
     }
     
     this.animations.forEach((clip, index) => {
+      const container = document.createElement('div');
+      container.className = 'animation-list-item';
+      container.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;';
+      
       const button = document.createElement('button');
       button.className = 'button is-fullwidth animation-item';
+      button.style.cssText = 'flex: 1;';
       button.innerHTML = `
         <div style="text-align: left; width: 100%;">
           <div><strong>${clip.name || `Animation ${index + 1}`}</strong></div>
@@ -39,7 +44,20 @@ export class AnimationManager {
         </div>
       `;
       button.onclick = () => this.playAnimation(index);
-      animationList.appendChild(button);
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'button is-danger is-small';
+      deleteBtn.style.cssText = 'flex-shrink: 0;';
+      deleteBtn.innerHTML = '✕';
+      deleteBtn.title = 'Remove animation';
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        this.removeAnimation(index);
+      };
+      
+      container.appendChild(button);
+      container.appendChild(deleteBtn);
+      animationList.appendChild(container);
     });
   }
   
@@ -299,6 +317,42 @@ export class AnimationManager {
     // Update UI
     this.populateAnimationList();
     this.updatePlaybackButtonsUI();
+    
+    return this.animations.length;
+  }
+  
+  /**
+   * Remove an animation by index
+   * @param {number} index - Index of animation to remove
+   */
+  removeAnimation(index) {
+    if (index < 0 || index >= this.animations.length) {
+      return;
+    }
+    
+    // If this is the currently playing animation, stop it
+    if (index === this.currentAnimationIndex) {
+      this.stopAnimation();
+      this.currentAnimationIndex = -1;
+    } else if (index < this.currentAnimationIndex) {
+      // Adjust current index if we're removing an animation before it
+      this.currentAnimationIndex--;
+    }
+    
+    // Remove the animation
+    const removed = this.animations.splice(index, 1);
+    
+    // Update UI
+    this.populateAnimationList();
+    this.updatePlaybackButtonsUI();
+    
+    // Show notification
+    if (window.uiManager) {
+      window.uiManager.showNotification(
+        `Removed animation: ${removed[0].name || 'Animation ' + (index + 1)}`,
+        'info'
+      );
+    }
     
     return this.animations.length;
   }

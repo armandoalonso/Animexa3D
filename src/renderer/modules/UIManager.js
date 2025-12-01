@@ -483,11 +483,103 @@ export class UIManager {
       return;
     }
     
-    // Set current model as source
-    this.retargetManager.setSourceModel(currentModel);
+    // Set current model as TARGET (it will receive animations)
+    this.retargetManager.setTargetModel(currentModel);
     this.updateRetargetingUI();
     
+    // Setup drag-drop handlers for retarget source model loading
+    this.setupRetargetDropZone();
+    
     document.getElementById('retarget-modal').classList.add('is-active');
+  }
+  
+  setupRetargetDropZone() {
+    const dropZone = document.getElementById('retarget-drop-zone');
+    const dropOverlay = document.getElementById('retarget-drop-overlay');
+    
+    if (!dropZone || !dropOverlay) return;
+    
+    // Remove previous listeners if any
+    const newDropZone = dropZone.cloneNode(true);
+    dropZone.parentNode.replaceChild(newDropZone, dropZone);
+    
+    const finalDropZone = document.getElementById('retarget-drop-zone');
+    const finalDropOverlay = document.getElementById('retarget-drop-overlay');
+    
+    // Re-attach button click handler
+    const loadButton = finalDropZone.querySelector('#btn-load-target-model');
+    if (loadButton) {
+      loadButton.addEventListener('click', () => this.handleLoadTargetModel());
+    }
+    
+    let dragCounter = 0;
+    
+    finalDropZone.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      dragCounter++;
+      if (dragCounter === 1) {
+        finalDropZone.classList.add('drag-over');
+        finalDropOverlay.classList.add('active');
+      }
+    });
+    
+    finalDropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+    
+    finalDropZone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter === 0) {
+        finalDropZone.classList.remove('drag-over');
+        finalDropOverlay.classList.remove('active');
+      }
+    });
+    
+    finalDropZone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      finalDropZone.classList.remove('drag-over');
+      finalDropOverlay.classList.remove('active');
+      
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length === 0) return;
+      
+      const file = files[0];
+      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      
+      // Check if it's a valid model file
+      if (!['.fbx', '.gltf', '.glb'].includes(ext)) {
+        this.showNotification('Please drop an FBX or GLTF/GLB file', 'warning');
+        return;
+      }
+      
+      // Read the file and load as source model (use loadAnimationFile to handle bone-only files)
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const modelData = await this.modelLoader.loadAnimationFile(
+          arrayBuffer,
+          ext.replace('.', ''),
+          file.name
+        );
+        
+        // Set as SOURCE model for retargeting (provides animations)
+        this.retargetManager.setSourceModel(modelData);
+        this.updateRetargetingUI();
+        
+        // Enable controls
+        document.getElementById('btn-auto-map').disabled = false;
+        document.getElementById('btn-clear-mapping').disabled = false;
+        document.getElementById('btn-save-mapping').disabled = false;
+        document.getElementById('btn-load-mapping').disabled = false;
+        
+        this.showNotification(`Source model loaded: ${file.name} (${modelData.animations.length} animations, ${modelData.boneNames.length} bones)`, 'success');
+        
+      } catch (error) {
+        console.error('Error loading dropped source model:', error);
+        this.showNotification('Failed to load model: ' + error.message, 'error');
+      }
+    });
   }
   
   async handleLoadTargetModel() {
@@ -497,14 +589,14 @@ export class UIManager {
       if (!fileData) return;
       
       const arrayBuffer = new Uint8Array(fileData.data).buffer;
-      const modelData = await this.modelLoader.loadFromBuffer(
+      const modelData = await this.modelLoader.loadAnimationFile(
         arrayBuffer,
         fileData.extension.replace('.', ''),
         fileData.name
       );
       
-      // Set as target model for retargeting
-      this.retargetManager.setTargetModel(modelData);
+      // Set as SOURCE model for retargeting (provides animations)
+      this.retargetManager.setSourceModel(modelData);
       this.updateRetargetingUI();
       
       // Enable controls
@@ -513,11 +605,11 @@ export class UIManager {
       document.getElementById('btn-save-mapping').disabled = false;
       document.getElementById('btn-load-mapping').disabled = false;
       
-      this.showNotification(`Target model loaded: ${fileData.name}`, 'success');
+      this.showNotification(`Source model loaded: ${fileData.name} (${modelData.animations.length} animations, ${modelData.boneNames.length} bones)`, 'success');
       
     } catch (error) {
-      console.error('Error loading target model:', error);
-      this.showNotification(`Failed to load target model: ${error.message}`, 'error');
+      console.error('Error loading source model:', error);
+      this.showNotification(`Failed to load source model: ${error.message}`, 'error');
     }
   }
   
@@ -525,35 +617,51 @@ export class UIManager {
     const sourceInfo = this.retargetManager.sourceSkeletonInfo;
     const targetInfo = this.retargetManager.targetSkeletonInfo;
     
-    // Update source info
-    if (sourceInfo) {
-      document.getElementById('source-rig-type').textContent = this.retargetManager.sourceRigType;
-      document.getElementById('source-bone-count').textContent = sourceInfo.bones.length;
-      
-      // Build source bone tree
-      const sourceTree = this.retargetManager.buildBoneTree(sourceInfo, true);
-      document.getElementById('source-bone-tree').innerHTML = sourceTree;
-      
-      // Add click handlers to source bones
-      this.addBoneClickHandlers('source');
-    }
-    
-    // Update target info
+    // Update TARGET info (current model - on the left)
     if (targetInfo) {
-      document.getElementById('target-rig-type').textContent = this.retargetManager.targetRigType;
-      document.getElementById('target-bone-count').textContent = targetInfo.bones.length;
+      document.getElementById('source-rig-type').textContent = this.retargetManager.targetRigType;
+      document.getElementById('source-bone-count').textContent = targetInfo.bones.length;
       
-      // Build target bone tree
+      // Build target bone tree in source position
       const targetTree = this.retargetManager.buildBoneTree(targetInfo, false);
-      document.getElementById('target-bone-tree').innerHTML = targetTree;
+      document.getElementById('source-bone-tree').innerHTML = targetTree;
       
       // Add click handlers to target bones
       this.addBoneClickHandlers('target');
     }
     
-    // Update animation list
-    const animations = this.animationManager.getAnimations();
-    this.updateRetargetAnimationList(animations);
+    // Update SOURCE info (uploaded model - on the right)
+    if (sourceInfo) {
+      document.getElementById('target-rig-type').textContent = this.retargetManager.sourceRigType;
+      document.getElementById('target-bone-count').textContent = sourceInfo.bones.length;
+      
+      // Build source bone tree in target position
+      const sourceTree = this.retargetManager.buildBoneTree(sourceInfo, true);
+      document.getElementById('target-bone-tree').innerHTML = sourceTree;
+      
+      // Add click handlers to source bones
+      this.addBoneClickHandlers('source');
+    }
+    
+    // Update animation list from SOURCE model
+    if (sourceInfo && this.retargetManager.sourceModel) {
+      // Get animations from source model if available
+      let sourceAnimations = [];
+      if (this.retargetManager.sourceModel.animations) {
+        sourceAnimations = this.retargetManager.sourceModel.animations;
+      } else if (this.retargetManager.sourceModel.traverse) {
+        // Try to find animations in the model
+        this.retargetManager.sourceModel.traverse((child) => {
+          if (child.animations && child.animations.length > 0) {
+            sourceAnimations = child.animations;
+          }
+        });
+      }
+      this.updateRetargetAnimationList(sourceAnimations);
+    } else {
+      // No source loaded yet, show empty
+      this.updateRetargetAnimationList([]);
+    }
     
     // Update mapping display
     this.updateMappingDisplay();
@@ -561,27 +669,55 @@ export class UIManager {
   
   addBoneClickHandlers(side) {
     const container = side === 'source' ? 
-      document.getElementById('source-bone-tree') : 
-      document.getElementById('target-bone-tree');
+      document.getElementById('target-bone-tree') : 
+      document.getElementById('source-bone-tree');
     
     const boneItems = container.querySelectorAll('.bone-item');
     
     boneItems.forEach(item => {
-      item.addEventListener('click', () => {
-        // Remove previous selection
-        container.querySelectorAll('.bone-item').forEach(b => b.classList.remove('selected'));
+      item.addEventListener('click', (e) => {
+        // Don't trigger if clicking the toggle
+        if (e.target.classList.contains('bone-toggle')) return;
         
-        // Add selection
+        // Clear previous selection on both sides
+        document.querySelectorAll('#source-bone-tree .bone-item').forEach(b => b.classList.remove('selected'));
+        document.querySelectorAll('#target-bone-tree .bone-item').forEach(b => b.classList.remove('selected'));
+        
         item.classList.add('selected');
         
         const boneName = item.getAttribute('data-bone');
+        const dataSide = item.getAttribute('data-side');
         
-        if (side === 'source') {
+        if (dataSide === 'source') {
+          // Clicked on source bone (right side - provides animations)
           this.retargetManager.selectedSourceBone = boneName;
-          document.getElementById('selected-source-bone').value = boneName;
-        } else {
-          this.retargetManager.selectedTargetBone = boneName;
           document.getElementById('selected-target-bone').value = boneName;
+          
+          // If this bone is mapped, highlight the corresponding bone on the other side
+          const mappedTargetBone = this.retargetManager.boneMapping[boneName];
+          if (mappedTargetBone) {
+            const mappedBone = document.querySelector(`#source-bone-tree [data-bone="${mappedTargetBone}"]`);
+            if (mappedBone) {
+              mappedBone.classList.add('selected');
+              mappedBone.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          }
+        } else {
+          // Clicked on target bone (left side - receives animations)
+          this.retargetManager.selectedTargetBone = boneName;
+          document.getElementById('selected-source-bone').value = boneName;
+          
+          // If this bone is mapped (find reverse mapping), highlight the corresponding bone on the other side
+          const mappedSourceBone = Object.keys(this.retargetManager.boneMapping).find(
+            key => this.retargetManager.boneMapping[key] === boneName
+          );
+          if (mappedSourceBone) {
+            const mappedBone = document.querySelector(`#target-bone-tree [data-bone="${mappedSourceBone}"]`);
+            if (mappedBone) {
+              mappedBone.classList.add('selected');
+              mappedBone.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          }
         }
         
         // Enable create mapping button if both selected
@@ -602,14 +738,63 @@ export class UIManager {
     
     container.innerHTML = '';
     
+    // Extract filename without extension from the source model
+    const sourceModel = this.retargetManager.sourceModel;
+    const fileName = sourceModel?.filename || '';
+    const fileNameWithoutExt = fileName ? (fileName.substring(0, fileName.lastIndexOf('.')) || fileName) : '';
+    
+    console.log('Retarget animation list - filename:', fileName, 'without ext:', fileNameWithoutExt);
+    
     animations.forEach((clip, index) => {
       const item = document.createElement('div');
-      item.className = 'retarget-animation-item';
+      item.className = 'retarget-animation-item-selectable';
       item.innerHTML = `
-        <input type="checkbox" id="retarget-anim-${index}" data-index="${index}">
-        <label for="retarget-anim-${index}">${clip.name || `Animation ${index + 1}`}</label>
+        <div class="field">
+          <label class="checkbox">
+            <input type="checkbox" class="retarget-animation-checkbox" data-index="${index}" checked>
+            <strong>${clip.name || `Animation ${index + 1}`}</strong> 
+            <span class="has-text-grey">(${clip.duration.toFixed(2)}s)</span>
+          </label>
+        </div>
+        <div class="field">
+          <label class="label is-small">Rename (optional)</label>
+          <div class="field has-addons">
+            <div class="control is-expanded">
+              <input type="text" class="input is-small retarget-animation-rename-input" data-index="${index}" 
+                     placeholder="Leave empty to keep original name" value="">
+            </div>
+            <div class="control">
+              <button class="button is-small retarget-use-filename-btn" data-index="${index}" 
+                      title="Use file name">
+                <span class="icon is-small">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="12" y1="18" x2="12" y2="12"></line>
+                    <line x1="9" y1="15" x2="15" y2="15"></line>
+                  </svg>
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
       `;
       container.appendChild(item);
+    });
+    
+    // Add event listeners to use-filename buttons
+    const filenameButtons = container.querySelectorAll('.retarget-use-filename-btn');
+    filenameButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const index = btn.getAttribute('data-index');
+        const input = container.querySelector(`.retarget-animation-rename-input[data-index="${index}"]`);
+        if (input && fileNameWithoutExt) {
+          input.value = fileNameWithoutExt;
+          console.log('Set filename for animation', index, ':', fileNameWithoutExt);
+        } else {
+          console.log('Could not set filename - input:', input, 'filename:', fileNameWithoutExt);
+        }
+      });
     });
   }
   
@@ -744,7 +929,7 @@ export class UIManager {
   
   async handleApplyRetarget() {
     const selectedAnimations = [];
-    const checkboxes = document.querySelectorAll('#retarget-animation-list input[type="checkbox"]:checked');
+    const checkboxes = document.querySelectorAll('#retarget-animation-list .retarget-animation-checkbox:checked');
     
     if (checkboxes.length === 0) {
       this.showNotification('Please select at least one animation to retarget', 'warning');
@@ -756,28 +941,58 @@ export class UIManager {
       selectedAnimations.push(index);
     });
     
-    const animations = this.animationManager.getAnimations();
+    // Get animations from the SOURCE model (not the target/current model)
+    const sourceModelData = this.retargetManager.sourceModel;
+    if (!sourceModelData || !sourceModelData.animations) {
+      console.error('Source model data:', sourceModelData);
+      this.showNotification('No animations found in source model', 'error');
+      return;
+    }
+    
+    console.log('Retargeting animations:', {
+      sourceAnimationCount: sourceModelData.animations.length,
+      selectedIndices: selectedAnimations,
+      boneMapping: Object.keys(this.retargetManager.boneMapping).length + ' bones mapped'
+    });
+    
+    const animations = sourceModelData.animations;
     const retargetedClips = [];
     
     for (const index of selectedAnimations) {
       const clip = animations[index];
-      const retargetedClip = this.retargetManager.retargetAnimation(clip);
-      if (retargetedClip) {
-        retargetedClips.push(retargetedClip);
+      if (clip) {
+        console.log(`Retargeting clip ${index}: ${clip.name}`);
+        const retargetedClip = this.retargetManager.retargetAnimation(clip);
+        if (retargetedClip) {
+          // Check if there's a rename input for this animation
+          const renameInput = document.querySelector(`.retarget-animation-rename-input[data-index="${index}"]`);
+          const newName = renameInput ? renameInput.value.trim() : '';
+          
+          if (newName) {
+            // Clone and rename the retargeted clip
+            const renamedClip = retargetedClip.clone();
+            renamedClip.name = newName;
+            retargetedClips.push(renamedClip);
+          } else {
+            retargetedClips.push(retargetedClip);
+          }
+        }
       }
     }
     
     if (retargetedClips.length > 0) {
-      // Add retargeted animations to the target model
-      this.animationManager.loadAnimations(retargetedClips);
+      // ADD retargeted animations to the target model (preserves existing animations)
+      this.animationManager.addAnimations(retargetedClips);
       
       this.showNotification(
-        `Successfully retargeted ${retargetedClips.length} animation(s)`,
+        `Successfully retargeted and added ${retargetedClips.length} animation(s)`,
         'success'
       );
       
       // Close modal
       document.getElementById('retarget-modal').classList.remove('is-active');
+    } else {
+      this.showNotification('No animations were successfully retargeted', 'warning');
     }
   }
   
@@ -1101,6 +1316,14 @@ export class UIManager {
     this.inlineBoneMapping = result.mapping;
     const mappedCount = Object.keys(this.inlineBoneMapping).length;
     const confidencePercent = Math.round(result.confidence * 100);
+    
+    // Log detailed mapping
+    console.log('🔗 Inline Bone Mapping (current→anim):');
+    console.log(`  Mapped: ${mappedCount} bones`);
+    console.log('  Mappings:');
+    for (const [src, trg] of Object.entries(this.inlineBoneMapping)) {
+      console.log(`    ${src} → ${trg}`);
+    }
     
     // Update UI
     document.getElementById('inline-mapped-count').textContent = mappedCount;
@@ -1447,19 +1670,14 @@ export class UIManager {
       return anim;
     });
     
-    // If retargeting is active and we have mappings, retarget the animations
+    // If retargeting is active and we have mappings, use robust retargeting
     if (this.inlineRetargetingActive && Object.keys(this.inlineBoneMapping).length > 0) {
       const currentModel = this.modelLoader.getCurrentModelData();
       
-      // Get retargeting options
-      const preserveHipPosition = document.getElementById('preserve-hip-position')?.checked || false;
-      const applyRestPoseCorrection = document.getElementById('apply-rest-pose-correction')?.checked || false;
-      
-      console.log('=== RETARGETING ANIMATION ===');
+      console.log('=== ROBUST RETARGETING ANIMATION ===');
       console.log('Bone mapping (current->anim):', this.inlineBoneMapping);
       console.log('Animation bones:', this.loadedAnimationData.boneNames);
       console.log('Current model bones:', currentModel.skeletons.boneNames);
-      console.log('Options:', { preserveHipPosition, applyRestPoseCorrection });
       
       // Invert the bone mapping for retargeting
       // inlineBoneMapping is: currentModelBone -> animBone
@@ -1471,71 +1689,70 @@ export class UIManager {
       
       console.log('Inverted mapping (anim->current):', invertedMapping);
       
-      // Calculate rest pose offsets if correction is enabled
-      let restPoseOffsets = null;
-      if (applyRestPoseCorrection) {
-        console.log('\n--- Calculating Rest Pose Offsets ---');
-        restPoseOffsets = this.calculateRestPoseOffsets(
-          currentModel.model,
-          this.loadedAnimationData,
-          selectedAnimations[0], // Use first animation to extract rest pose
-          invertedMapping
-        );
-        console.log('Rest pose offsets calculated:', Object.keys(restPoseOffsets).length, 'bones');
+      // Log detailed mapping for debugging
+      console.log('🔗 Bone Mapping Details:');
+      console.log(`  Mapped: ${Object.keys(invertedMapping).length} bones`);
+      console.log('  Mappings:');
+      for (const [src, trg] of Object.entries(invertedMapping)) {
+        console.log(`    ${src} → ${trg}`);
       }
       
-      // Retarget each animation
-      const retargetedAnimations = [];
-      for (const animation of selectedAnimations) {
-        try {
-          console.log(`\nRetargeting: ${animation.name}`);
-          console.log(`  Original tracks: ${animation.tracks.length}`);
-          
-          // Adapt animation to current model
-          const retargetedClip = this.retargetAnimationForCurrentModel(
-            animation, 
-            invertedMapping,
-            preserveHipPosition,
-            restPoseOffsets
-          );
-          
-          if (retargetedClip) {
-            console.log(`  ✓ Retargeted tracks: ${retargetedClip.tracks.length}`);
-            retargetedAnimations.push(retargetedClip);
-          } else {
-            console.warn(`  ✗ Failed to retarget ${animation.name}`);
+      try {
+        // Setup retargeting using the robust RetargetManager
+        // Set animation data as source (can be animation file structure)
+        this.retargetManager.setSourceModel(this.loadedAnimationData);
+        this.retargetManager.setTargetModel(currentModel);
+        
+        // Apply bone mapping
+        this.retargetManager.boneMapping = invertedMapping;
+        
+        // Initialize retargeting (compute bind poses, precompute quaternions, etc.)
+        this.retargetManager.initializeRetargeting();
+        
+        // Retarget each animation
+        const retargetedAnimations = [];
+        for (const animation of selectedAnimations) {
+          try {
+            console.log(`\nRetargeting: ${animation.name}`);
+            console.log(`  Original tracks: ${animation.tracks.length}`);
+            
+            // Use robust retargeting algorithm
+            const retargetedClip = this.retargetManager.retargetAnimation(animation);
+            
+            if (retargetedClip) {
+              console.log(`  ✓ Retargeted tracks: ${retargetedClip.tracks.length}`);
+              retargetedAnimations.push(retargetedClip);
+            } else {
+              console.warn(`  ✗ Failed to retarget ${animation.name}`);
+            }
+          } catch (error) {
+            console.error(`  ✗ Error retargeting ${animation.name}:`, error);
           }
-        } catch (error) {
-          console.error(`  ✗ Error retargeting ${animation.name}:`, error);
-        }
-      }
-      
-      console.log(`\n=== RETARGETING COMPLETE: ${retargetedAnimations.length}/${selectedAnimations.length} successful ===\n`);
-      
-      if (retargetedAnimations.length > 0) {
-        selectedAnimations = retargetedAnimations;
-        
-        // Show detailed notification
-        let message = `Retargeted ${retargetedAnimations.length} animation(s)`;
-        if (applyRestPoseCorrection) {
-          message += ' with rest pose correction';
-        }
-        if (retargetedAnimations.length < selectedAnimations.length) {
-          message += ` (${selectedAnimations.length - retargetedAnimations.length} failed)`;
         }
         
-        this.showNotification(message, 'success', 8000);
+        console.log(`\n=== RETARGETING COMPLETE: ${retargetedAnimations.length}/${selectedAnimations.length} successful ===\n`);
         
-        // Add helpful tip
-        if (applyRestPoseCorrection) {
+        if (retargetedAnimations.length > 0) {
+          selectedAnimations = retargetedAnimations;
+          
+          const mappingInfo = this.retargetManager.getMappingInfo();
+          const message = `Retargeted ${retargetedAnimations.length} animation(s) using robust algorithm (${mappingInfo.mappingCount} bones mapped, ${(mappingInfo.confidence * 100).toFixed(0)}% confidence)`;
+          
+          this.showNotification(message, 'success', 8000);
+          
+          // Show proportions info
           this.showNotification(
-            '💡 If the animation still looks wrong, try disabling "Rest Pose Correction" and re-import.',
+            `📐 Scale ratio: ${this.retargetManager.proportionRatio.toFixed(3)}x - Positions automatically adjusted`,
             'info',
-            10000
+            6000
           );
+        } else {
+          this.showNotification('Failed to retarget animations. Check the console for details.', 'error');
+          return;
         }
-      } else {
-        this.showNotification('Failed to retarget animations. Check the console for details.', 'error');
+      } catch (error) {
+        console.error('Retargeting setup error:', error);
+        this.showNotification(`Retargeting failed: ${error.message}`, 'error');
         return;
       }
     }
