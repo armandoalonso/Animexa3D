@@ -35,6 +35,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveTextureToTemp: (filename, bufferArray) => 
     ipcRenderer.invoke('file:saveTextureToTemp', filename, bufferArray),
   
+  // Model export
+  saveModelExport: (folderPath, filename, bufferArray, format) =>
+    ipcRenderer.invoke('file:saveModelExport', folderPath, filename, bufferArray, format),
+  
   // Notifications
   showNotification: (title, body) => 
     ipcRenderer.invoke('notification:show', title, body)

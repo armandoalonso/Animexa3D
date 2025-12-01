@@ -91,7 +91,31 @@ export class AnimationManager {
     const clip = this.animations[index];
     
     console.log(`🎬 Playing animation: ${clip.name}`);
+    console.log(`   Duration: ${clip.duration.toFixed(3)}s`);
     console.log(`   Tracks: ${clip.tracks.length}`);
+    
+    // Analyze track timing to detect if animation has empty space at the start
+    let earliestKeyframe = Infinity;
+    let latestKeyframe = -Infinity;
+    
+    clip.tracks.forEach(track => {
+      if (track.times && track.times.length > 0) {
+        const firstTime = track.times[0];
+        const lastTime = track.times[track.times.length - 1];
+        earliestKeyframe = Math.min(earliestKeyframe, firstTime);
+        latestKeyframe = Math.max(latestKeyframe, lastTime);
+      }
+    });
+    
+    if (earliestKeyframe !== Infinity) {
+      console.log(`   ⏱️ First keyframe: ${earliestKeyframe.toFixed(3)}s`);
+      console.log(`   ⏱️ Last keyframe: ${latestKeyframe.toFixed(3)}s`);
+      console.log(`   ⏱️ Actual animation length: ${(latestKeyframe - earliestKeyframe).toFixed(3)}s`);
+      
+      if (earliestKeyframe > 0.1) {
+        console.warn(`   ⚠️ Animation has ${earliestKeyframe.toFixed(3)}s of empty space at the start!`);
+      }
+    }
     
     // Log position tracks for root motion debugging
     const positionTracks = clip.tracks.filter(t => t.name.endsWith('.position'));
@@ -328,6 +352,13 @@ export class AnimationManager {
   }
   
   getAnimations() {
+    return this.animations;
+  }
+  
+  /**
+   * Get all animations (same as getAnimations, for clarity)
+   */
+  getAllAnimations() {
     return this.animations;
   }
   

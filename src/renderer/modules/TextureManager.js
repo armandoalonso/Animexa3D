@@ -1,10 +1,12 @@
 import * as THREE from 'three';
+import { TGALoader } from 'three/examples/jsm/loaders/TGALoader.js';
 
 export class TextureManager {
   constructor() {
     this.materials = [];
     this.textureCache = new Map();
     this.tempTexturePath = null;
+    this.tgaLoader = new TGALoader();
   }
 
   /**
@@ -150,64 +152,130 @@ export class TextureManager {
     }
 
     try {
-      // Read the image file as buffer
-      const imageData = await window.electronAPI.readImageFile(imagePath);
-      const uint8Array = new Uint8Array(imageData);
-      const blob = new Blob([uint8Array], { type: this.getMimeType(imagePath) });
-      const url = URL.createObjectURL(blob);
-
-      // Create image element and load the texture
-      const img = new Image();
+      // Check file extension to determine loader
+      const fileExtension = imagePath.split('.').pop().toLowerCase();
       
-      const newTexture = await new Promise((resolve, reject) => {
-        img.onload = () => {
-          try {
-            // Create texture from loaded image
-            const texture = new THREE.Texture(img);
-            
-            // Copy settings from old texture if it exists
-            const oldTexture = materialData.material[textureKey];
-            if (oldTexture) {
-              texture.wrapS = oldTexture.wrapS;
-              texture.wrapT = oldTexture.wrapT;
-              texture.repeat.copy(oldTexture.repeat);
-              texture.offset.copy(oldTexture.offset);
-              texture.rotation = oldTexture.rotation;
-              texture.center.copy(oldTexture.center);
+      let newTexture;
+      
+      if (fileExtension === 'tga') {
+        // Use TGALoader for TGA files
+        const imageData = await window.electronAPI.readImageFile(imagePath);
+        const uint8Array = new Uint8Array(imageData);
+        const blob = new Blob([uint8Array], { type: 'image/x-tga' });
+        const url = URL.createObjectURL(blob);
+        
+        newTexture = await new Promise((resolve, reject) => {
+          this.tgaLoader.load(
+            url,
+            (texture) => {
+              try {
+                // Copy settings from old texture if it exists
+                const oldTexture = materialData.material[textureKey];
+                if (oldTexture) {
+                  texture.wrapS = oldTexture.wrapS;
+                  texture.wrapT = oldTexture.wrapT;
+                  texture.repeat.copy(oldTexture.repeat);
+                  texture.offset.copy(oldTexture.offset);
+                  texture.rotation = oldTexture.rotation;
+                  texture.center.copy(oldTexture.center);
+                  
+                  // Dispose old texture
+                  oldTexture.dispose();
+                } else {
+                  // Default settings for new texture
+                  texture.wrapS = THREE.RepeatWrapping;
+                  texture.wrapT = THREE.RepeatWrapping;
+                }
+
+                // Set color space based on texture type
+                if (textureKey === 'normalMap' || textureKey === 'roughnessMap' || 
+                    textureKey === 'metalnessMap' || textureKey === 'aoMap') {
+                  texture.colorSpace = THREE.LinearSRGBColorSpace;
+                } else {
+                  texture.colorSpace = THREE.SRGBColorSpace;
+                }
+
+                // Store path in userData
+                texture.userData.path = imagePath;
+                texture.needsUpdate = true;
+                
+                URL.revokeObjectURL(url);
+                resolve(texture);
+              } catch (error) {
+                URL.revokeObjectURL(url);
+                reject(error);
+              }
+            },
+            undefined,
+            (error) => {
+              URL.revokeObjectURL(url);
+              reject(new Error(`Failed to load TGA: ${error}`));
+            }
+          );
+        });
+      } else {
+        // Use standard image loading for PNG, JPG, etc.
+        const imageData = await window.electronAPI.readImageFile(imagePath);
+        const uint8Array = new Uint8Array(imageData);
+        const blob = new Blob([uint8Array], { type: this.getMimeType(imagePath) });
+        const url = URL.createObjectURL(blob);
+
+        // Create image element and load the texture
+        const img = new Image();
+        
+        newTexture = await new Promise((resolve, reject) => {
+          img.onload = () => {
+            try {
+              // Create texture from loaded image
+              const texture = new THREE.Texture(img);
               
-              // Dispose old texture
-              oldTexture.dispose();
-            } else {
-              // Default settings for new texture
-              texture.wrapS = THREE.RepeatWrapping;
-              texture.wrapT = THREE.RepeatWrapping;
-            }
+              // Copy settings from old texture if it exists
+              const oldTexture = materialData.material[textureKey];
+              if (oldTexture) {
+                texture.wrapS = oldTexture.wrapS;
+                texture.wrapT = oldTexture.wrapT;
+                texture.repeat.copy(oldTexture.repeat);
+                texture.offset.copy(oldTexture.offset);
+                texture.rotation = oldTexture.rotation;
+                texture.center.copy(oldTexture.center);
+                
+                // Dispose old texture
+                oldTexture.dispose();
+              } else {
+                // Default settings for new texture
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+              }
 
-            // Special settings for normal maps
-            if (textureKey === 'normalMap') {
-              texture.colorSpace = THREE.LinearSRGBColorSpace;
-            } else {
-              texture.colorSpace = THREE.SRGBColorSpace;
-            }
+              // Special settings for normal maps
+              if (textureKey === 'normalMap') {
+                texture.colorSpace = THREE.LinearSRGBColorSpace;
+              } else {
+                texture.colorSpace = THREE.SRGBColorSpace;
+              }
 
-            // Store path in userData
-            texture.userData.path = imagePath;
-            
-            // Mark texture as needing update
-            texture.needsUpdate = true;
-            
-            resolve(texture);
-          } catch (error) {
-            reject(error);
-          }
-        };
-        
-        img.onerror = (error) => {
-          reject(new Error(`Failed to load image: ${error}`));
-        };
-        
-        img.src = url;
-      });
+              // Store path in userData
+              texture.userData.path = imagePath;
+              
+              // Mark texture as needing update
+              texture.needsUpdate = true;
+              
+              URL.revokeObjectURL(url);
+              resolve(texture);
+            } catch (error) {
+              URL.revokeObjectURL(url);
+              reject(error);
+            }
+          };
+          
+          img.onerror = (error) => {
+            URL.revokeObjectURL(url);
+            reject(new Error(`Failed to load image: ${error}`));
+          };
+          
+          img.src = url;
+        });
+      }
 
       // Update material
       materialData.material[textureKey] = newTexture;
@@ -237,11 +305,6 @@ export class TextureManager {
       materialData.meshes.forEach(mesh => {
         mesh.material = materialData.material;
       });
-
-      // Clean up blob URL after a delay to ensure texture is loaded
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, 100);
 
       return true;
     } catch (error) {
@@ -456,17 +519,56 @@ export class TextureManager {
    * @returns {string} Data URL of thumbnail
    */
   getTextureThumbnail(texture, size = 64) {
-    if (!texture || !texture.image) {
+    if (!texture) {
       return null;
     }
 
     try {
+      // For TGA textures or textures without proper image property, render from WebGL
+      if (!texture.image || !texture.image.width || !texture.image.height ||
+          !(texture.image instanceof HTMLImageElement || texture.image instanceof HTMLCanvasElement)) {
+        
+        // Create a canvas for WebGL rendering
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        
+        // Create a simple scene to render the texture
+        const scene = new THREE.Scene();
+        const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        const geometry = new THREE.PlaneGeometry(2, 2);
+        const material = new THREE.MeshBasicMaterial({ map: texture });
+        const mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+        
+        const renderer = new THREE.WebGLRenderer({ 
+          canvas: canvas,
+          alpha: false,
+          preserveDrawingBuffer: true 
+        });
+        renderer.setSize(size, size);
+        renderer.render(scene, camera);
+        
+        const dataUrl = canvas.toDataURL('image/png');
+        
+        // Cleanup
+        geometry.dispose();
+        material.dispose();
+        renderer.dispose();
+        
+        return dataUrl;
+      }
+
+      // Standard image-based thumbnail - use 2D canvas
       const canvas = document.createElement('canvas');
       canvas.width = size;
       canvas.height = size;
       const ctx = canvas.getContext('2d');
+      
+      // Fill background
+      ctx.fillStyle = '#333';
+      ctx.fillRect(0, 0, size, size);
 
-      // Draw the texture image to canvas
       const img = texture.image;
       const aspectRatio = img.width / img.height;
       
@@ -483,8 +585,6 @@ export class TextureManager {
         offsetX = (size - drawWidth) / 2;
       }
 
-      ctx.fillStyle = '#333';
-      ctx.fillRect(0, 0, size, size);
       ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
 
       return canvas.toDataURL('image/png');

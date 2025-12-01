@@ -1,3 +1,5 @@
+import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+
 export class ExportManager {
   constructor(sceneManager, animationManager) {
     this.sceneManager = sceneManager;
@@ -5,6 +7,7 @@ export class ExportManager {
     this.isExporting = false;
     this.cancelExport = false;
     this.exportFolder = null;
+    this.gltfExporter = new GLTFExporter();
   }
   
   // Helper function to format timestamp
@@ -239,5 +242,147 @@ export class ExportManager {
   
   getExportFolder() {
     return this.exportFolder;
+  }
+  
+  /**
+   * Export the current model with modified textures and animations
+   * @param {Object} config - Export configuration
+   * @param {string} config.format - 'glb' or 'gltf'
+   * @param {string} config.folder - Output folder path
+   * @param {string} config.filename - Output filename (without extension)
+   * @param {boolean} config.embedTextures - Whether to embed textures
+   */
+  async exportModel(config) {
+    const { format, folder, filename, embedTextures } = config;
+    
+    try {
+      // Get the current model from the scene
+      const model = this.sceneManager.getModel();
+      
+      if (!model) {
+        throw new Error('No model loaded');
+      }
+      
+      // Get all animations (including retargeted ones)
+      const animations = this.animationManager.getAllAnimations();
+      
+      console.log('Exporting model:', {
+        format,
+        filename,
+        embedTextures,
+        animationCount: animations.length,
+        currentScale: model.scale
+      });
+      
+      // Store original transform to restore after export
+      const originalScale = model.scale.clone();
+      const originalPosition = model.position.clone();
+      const originalRotation = model.rotation.clone();
+      
+      // Temporarily reset transform for export
+      model.scale.set(1, 1, 1);
+      model.position.set(0, 0, 0);
+      model.rotation.set(0, 0, 0);
+      
+      // Update matrices to reflect the changes
+      model.updateMatrix();
+      model.updateMatrixWorld(true);
+      
+      console.log('Temporarily reset model transform for export');
+      
+      // Prepare export options
+      const exportOptions = {
+        binary: format === 'glb',
+        animations: animations,
+        embedImages: embedTextures,
+        maxTextureSize: 4096
+      };
+      
+      // Show progress notification
+      window.uiManager.showNotification('Exporting model...', 'info', 2000);
+      
+      // Export using GLTFExporter
+      return new Promise((resolve, reject) => {
+        this.gltfExporter.parse(
+          model,
+          async (result) => {
+            // Restore original transform immediately after export
+            model.scale.copy(originalScale);
+            model.position.copy(originalPosition);
+            model.rotation.copy(originalRotation);
+            model.updateMatrix();
+            model.updateMatrixWorld(true);
+            
+            console.log('Restored model transform after export');
+            
+            try {
+              let outputData;
+              let extension;
+              
+              if (format === 'glb') {
+                // GLB format - binary ArrayBuffer
+                outputData = result;
+                extension = 'glb';
+              } else {
+                // GLTF format - JSON string
+                outputData = JSON.stringify(result, null, 2);
+                extension = 'gltf';
+              }
+              
+              // Convert to buffer for IPC
+              let buffer;
+              if (outputData instanceof ArrayBuffer) {
+                buffer = Array.from(new Uint8Array(outputData));
+              } else {
+                // Convert string to buffer
+                const encoder = new TextEncoder();
+                buffer = Array.from(encoder.encode(outputData));
+              }
+              
+              // Save via IPC
+              const fullFilename = `${filename}.${extension}`;
+              const saveResult = await window.electronAPI.saveModelExport(
+                folder,
+                fullFilename,
+                buffer,
+                format
+              );
+              
+              if (saveResult.success) {
+                window.uiManager.showNotification(
+                  `Model exported successfully: ${fullFilename}`,
+                  'success'
+                );
+                resolve(saveResult);
+              } else {
+                throw new Error(saveResult.error || 'Failed to save exported model');
+              }
+            } catch (error) {
+              reject(error);
+            }
+          },
+          (error) => {
+            // Restore original transform on error too
+            model.scale.copy(originalScale);
+            model.position.copy(originalPosition);
+            model.rotation.copy(originalRotation);
+            model.updateMatrix();
+            model.updateMatrixWorld(true);
+            
+            console.error('Export error, restored model transform');
+            reject(error);
+          },
+          exportOptions
+        );
+      });
+      
+    } catch (error) {
+      console.error('Export model error:', error);
+      window.uiManager.showNotification(
+        `Export failed: ${error.message}`,
+        'error'
+      );
+      throw error;
+    }
   }
 }

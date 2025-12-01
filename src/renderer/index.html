@@ -60,6 +60,10 @@
                 <span class="icon"><span>🔄</span></span>
                 <span>Retarget Animation</span>
               </button>
+              <button id="btn-export-model" class="button is-success">
+                <span class="icon"><span>💾</span></span>
+                <span>Export Model</span>
+              </button>
             </div>
           </div>
         </div>
@@ -497,6 +501,15 @@
             </button>
           </div>
         </div>
+        
+        <!-- Auto-Map Options -->
+        <div class="box" style="margin-top: 0.5rem;">
+          <label class="checkbox">
+            <input type="checkbox" id="auto-map-include-hands">
+            Include Hand Bones (Fingers)
+          </label>
+          <p class="help">Map finger bones during automatic mapping. Useful for animations with hand gestures.</p>
+        </div>
 
         <!-- Mapping Info -->
         <div id="mapping-info" class="notification is-light" style="margin-top: 1rem; display: none;">
@@ -657,6 +670,72 @@
     </div>
   </div>
 
+  <!-- Export Model Modal -->
+  <div id="export-model-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title">Export Model</p>
+        <button class="delete" aria-label="close"></button>
+      </header>
+      <section class="modal-card-body">
+        <div class="notification is-info is-light">
+          <p><strong>Export your model with:</strong></p>
+          <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+            <li>Modified textures (if changed)</li>
+            <li>All animations (including retargeted ones)</li>
+            <li>Original geometry and materials</li>
+          </ul>
+        </div>
+        
+        <div class="field">
+          <label class="label">File Format</label>
+          <div class="control">
+            <label class="radio">
+              <input type="radio" name="export-model-format" value="glb" checked>
+              GLB (Binary, Single File)
+            </label>
+            <label class="radio">
+              <input type="radio" name="export-model-format" value="gltf">
+              GLTF (JSON + Assets)
+            </label>
+          </div>
+          <p class="help">GLB is recommended for most use cases</p>
+        </div>
+        
+        <div class="field">
+          <label class="label">Export Location</label>
+          <div class="field has-addons">
+            <div class="control is-expanded">
+              <input type="text" id="export-model-folder" class="input" readonly placeholder="Choose folder...">
+            </div>
+            <div class="control">
+              <button id="btn-choose-export-model-folder" class="button is-info">Browse</button>
+            </div>
+          </div>
+        </div>
+        
+        <div class="field">
+          <label class="label">File Name</label>
+          <input type="text" id="export-model-filename" class="input" placeholder="exported-model">
+          <p class="help">File extension will be added automatically</p>
+        </div>
+        
+        <div class="field">
+          <label class="checkbox">
+            <input type="checkbox" id="export-model-embed-textures" checked>
+            Embed Textures
+          </label>
+          <p class="help">Include textures directly in the file (recommended)</p>
+        </div>
+      </section>
+      <footer class="modal-card-foot">
+        <button id="btn-start-model-export" class="button is-success" disabled>Export</button>
+        <button class="button">Cancel</button>
+      </footer>
+    </div>
+  </div>
+
   <!-- Save Camera Preset Modal -->
   <div id="save-camera-preset-modal" class="modal">
     <div class="modal-background"></div>
@@ -778,6 +857,15 @@
                   <span>Show Bone Trees</span>
                 </button>
               </div>
+            </div>
+            
+            <!-- Auto-Map Options (Inline) -->
+            <div class="field" style="margin-bottom: 1rem;">
+              <label class="checkbox">
+                <input type="checkbox" id="auto-map-include-hands-inline">
+                Include Hand Bones (Fingers)
+              </label>
+              <p class="help is-size-7">Map finger bones during automatic mapping</p>
             </div>
 
             <!-- Bone Mapping Info -->

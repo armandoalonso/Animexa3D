@@ -28,6 +28,12 @@ export class UIManager {
     document.getElementById('btn-capture').addEventListener('click', () => this.handleCaptureFrame());
     document.getElementById('btn-retarget').addEventListener('click', () => this.handleOpenRetargetModal());
     
+    // Export Model
+    document.getElementById('btn-export-model').addEventListener('click', () => this.handleOpenExportModelModal());
+    document.getElementById('btn-choose-export-model-folder').addEventListener('click', () => this.handleChooseExportModelFolder());
+    document.getElementById('btn-start-model-export').addEventListener('click', () => this.handleStartModelExport());
+    document.getElementById('export-model-filename').addEventListener('input', () => this.updateExportModelButton());
+    
     const addAnimBtn = document.getElementById('btn-add-animation');
     console.log('Add animation button found during init:', addAnimBtn);
     if (addAnimBtn) {
@@ -159,6 +165,7 @@ export class UIManager {
         document.getElementById('btn-retarget').disabled = false;
         document.getElementById('btn-add-animation').disabled = false;
         document.getElementById('btn-save-project').disabled = false;
+        document.getElementById('btn-export-model').disabled = false;
         
         this.showNotification('Project loaded successfully!', 'success');
       }
@@ -180,11 +187,14 @@ export class UIManager {
       if (!fileData) return; // User cancelled
       
       const arrayBuffer = new Uint8Array(fileData.data).buffer;
+      console.log('About to load model from buffer');
       const modelData = await this.modelLoader.loadFromBuffer(
         arrayBuffer,
         fileData.extension.replace('.', ''),
         fileData.name
       );
+      
+      console.log('Model loaded, modelData exists:', !!modelData);
       
       // Store the file path for saving
       if (modelData) {
@@ -195,12 +205,15 @@ export class UIManager {
       
       // Load animations
       if (modelData.animations && modelData.animations.length > 0) {
+        console.log('Loading animations:', modelData.animations.length);
         this.animationManager.loadAnimations(modelData.animations);
       } else {
+        console.log('No animations, loading empty array');
         this.animationManager.loadAnimations([]);
         this.showNotification('Model has no animations', 'warning');
       }
 
+      console.log('About to extract materials');
       // Extract and display textures
       const materials = this.textureManager.extractMaterials(modelData.model);
       console.log('Extracted materials:', materials.length);
@@ -216,28 +229,21 @@ export class UIManager {
         }
       });
       
-      // Extract embedded textures if any
+      // Extract embedded textures and display (non-blocking)
       if (materials.length > 0) {
-        console.log('Starting embedded texture extraction...');
-        await this.textureManager.extractEmbeddedTextures(materials);
-        console.log('Embedded texture extraction complete');
-        this.displayTextures();
+        this.textureManager.extractEmbeddedTextures(materials).then(() => {
+          this.displayTextures();
+        }).catch(error => {
+          console.error('Error extracting textures:', error);
+          this.displayTextures(); // Display anyway
+        });
       } else {
-        console.log('No materials found in model');
         this.clearTextureDisplay();
       }
       
-      // Enable retarget button after model is loaded
+      // Enable buttons after model is loaded
       document.getElementById('btn-retarget').disabled = false;
-      
-      // Enable add animation button after model is loaded
-      const addAnimBtn = document.getElementById('btn-add-animation');
-      if (addAnimBtn) {
-        addAnimBtn.disabled = false;
-        console.log('Add animation button enabled');
-      } else {
-        console.error('Add animation button not found!');
-      }
+      document.getElementById('btn-add-animation').disabled = false;
       
       // Enable save project button
       document.getElementById('btn-save-project').disabled = false;
@@ -277,6 +283,7 @@ export class UIManager {
       document.getElementById('btn-save-project').disabled = true;
       document.getElementById('btn-export').disabled = true;
       document.getElementById('btn-capture').disabled = true;
+      // btn-export-model stays enabled - validation happens in handler
       
       // Reset animation list
       document.getElementById('animation-list').innerHTML = '<div class="empty-state"><p class="has-text-grey">No model loaded</p></div>';
@@ -822,7 +829,8 @@ export class UIManager {
   }
   
   handleAutoMap() {
-    const result = this.retargetManager.autoMapBones();
+    const includeHandBones = document.getElementById('auto-map-include-hands').checked;
+    const result = this.retargetManager.autoMapBones(includeHandBones);
     if (result) {
       this.updateMappingDisplay();
       this.updateRetargetingUI();
@@ -1480,11 +1488,13 @@ export class UIManager {
     }
     
     const currentModel = this.modelLoader.getCurrentModelData();
+    const includeHandBones = document.getElementById('auto-map-include-hands-inline').checked;
     
     // Generate automatic mapping: current model -> animation file
     const result = this.retargetManager.generateAutomaticMapping(
       currentModel.skeletons.boneNames,
-      this.loadedAnimationData.boneNames
+      this.loadedAnimationData.boneNames,
+      includeHandBones
     );
     
     this.inlineBoneMapping = result.mapping;
@@ -2604,6 +2614,86 @@ export class UIManager {
       document.getElementById('rename-animation-modal').classList.remove('is-active');
       input.value = '';
       delete input.dataset.animationIndex;
+    }
+  }
+  
+  /**
+   * Export Model Handlers
+   */
+  
+  handleOpenExportModelModal() {
+    const currentModel = this.modelLoader.getCurrentModelData();
+    
+    if (!currentModel) {
+      this.showNotification('Please load a model first', 'warning');
+      return;
+    }
+    
+    // Pre-fill filename with current model name if available
+    const modelName = currentModel.filename || 'exported-model';
+    const filenameWithoutExt = modelName.substring(0, modelName.lastIndexOf('.')) || modelName;
+    document.getElementById('export-model-filename').value = filenameWithoutExt;
+    
+    // Open modal
+    document.getElementById('export-model-modal').classList.add('is-active');
+  }
+  
+  async handleChooseExportModelFolder() {
+    const folder = await window.electronAPI.chooseExportFolder();
+    if (folder) {
+      document.getElementById('export-model-folder').value = folder;
+      this.updateExportModelButton();
+    }
+  }
+  
+  updateExportModelButton() {
+    const folder = document.getElementById('export-model-folder').value;
+    const filename = document.getElementById('export-model-filename').value;
+    const btn = document.getElementById('btn-start-model-export');
+    
+    btn.disabled = !folder || !filename.trim();
+  }
+  
+  async handleStartModelExport() {
+    const folder = document.getElementById('export-model-folder').value;
+    const filename = document.getElementById('export-model-filename').value.trim();
+    const formatRadio = document.querySelector('input[name="export-model-format"]:checked');
+    const format = formatRadio ? formatRadio.value : 'glb';
+    const embedTextures = document.getElementById('export-model-embed-textures').checked;
+    
+    if (!folder || !filename) {
+      this.showNotification('Please select a folder and filename', 'warning');
+      return;
+    }
+    
+    // Close modal
+    document.getElementById('export-model-modal').classList.remove('is-active');
+    
+    // Show loading overlay
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const loadingText = document.getElementById('loading-text');
+    if (loadingText) {
+      loadingText.textContent = `Exporting ${format.toUpperCase()}...`;
+    }
+    if (loadingOverlay) {
+      loadingOverlay.classList.add('active');
+    }
+    
+    try {
+      await this.exportManager.exportModel({
+        format,
+        folder,
+        filename,
+        embedTextures
+      });
+    } catch (error) {
+      console.error('Export model error:', error);
+      this.showNotification(`Export failed: ${error.message}`, 'error');
+    } finally {
+      // Hide loading overlay after export completes
+      if (loadingOverlay) {
+        loadingOverlay.classList.remove('active');
+      }
     }
   }
 }

@@ -391,3 +391,24 @@ ipcMain.handle('file:saveDroppedProject', async (event, bufferArray, fileName) =
     throw error;
   }
 });
+
+// Save exported model
+ipcMain.handle('file:saveModelExport', async (event, folderPath, filename, bufferArray, format) => {
+  try {
+    const filePath = path.join(folderPath, filename);
+    const buffer = Buffer.from(bufferArray);
+    
+    if (format === 'glb') {
+      // GLB is binary format
+      await fs.promises.writeFile(filePath, buffer);
+    } else {
+      // GLTF is text format
+      await fs.promises.writeFile(filePath, buffer, 'utf8');
+    }
+    
+    return { success: true, path: filePath };
+  } catch (error) {
+    console.error('Error saving exported model:', error);
+    return { success: false, error: error.message };
+  }
+});

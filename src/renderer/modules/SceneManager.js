@@ -158,12 +158,18 @@ export class SceneManager {
     const center = box.getCenter(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z);
     
-    // Scale model if it's too large (normalize to reasonable size)
-    // Assume a character should be around 2 units tall
-    const targetSize = 2;
-    if (maxDim > targetSize * 2) {
+    console.log('Model bounding box:', { size, center, maxDim });
+    
+    // Scale model to a standard size for consistent viewing
+    // Target size: humanoid characters should be around 1.8 units tall
+    const targetSize = 1.8;
+    
+    // Always normalize models to target size for consistency
+    if (maxDim > 0.1) { // Avoid division by zero
       const scale = targetSize / maxDim;
       model.scale.set(scale, scale, scale);
+      console.log(`Model scaled by ${scale.toFixed(4)}x (was ${maxDim.toFixed(2)} units, now ~${targetSize} units)`);
+      
       // Recalculate after scaling
       box.setFromObject(model);
       size.copy(box.getSize(new THREE.Vector3()));
@@ -179,23 +185,57 @@ export class SceneManager {
     // Then position bottom at grid level
     model.position.y = -box.min.y;
     
-    // Adjust grid size based on model
-    const gridSize = Math.max(20, Math.ceil(maxDim * 2));
+    // Adjust grid size based on model (use post-scaled dimensions)
+    const gridSize = Math.max(10, Math.ceil(Math.max(size.x, size.z) * 3));
     this.scene.remove(this.grid);
     this.grid = new THREE.GridHelper(gridSize, gridSize, 0x888888, 0x444444);
     if (this.gridVisible) {
       this.scene.add(this.grid);
     }
     
-    // Adjust camera to fit model
-    const scaledMaxDim = Math.max(size.x, size.y, size.z);
-    const fov = this.camera.fov * (Math.PI / 180);
-    let cameraZ = Math.abs(scaledMaxDim / 2 / Math.tan(fov / 2));
-    cameraZ *= 1.5; // Add some padding
+    // Frame model in camera view
+    this.frameModel();
+  }
+  
+  /**
+   * Adjust camera to frame the current model in view
+   */
+  frameModel() {
+    if (!this.currentModel) return;
     
-    this.camera.position.set(0, scaledMaxDim * 0.5, cameraZ);
-    this.controls.target.set(0, size.y * 0.5, 0);
+    const box = new THREE.Box3().setFromObject(this.currentModel);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    
+    // Calculate distance needed to fit model in view
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = this.camera.fov * (Math.PI / 180);
+    
+    // Calculate required distance to fit the model
+    const cameraDistance = maxDim / (2 * Math.tan(fov / 2));
+    
+    // Add substantial padding (2.5x) for comfortable viewing
+    const distance = cameraDistance * 2.5;
+    
+    // Position camera at an angle (45 degrees around, elevated)
+    const angle = Math.PI / 4; // 45 degrees
+    const cameraX = Math.sin(angle) * distance;
+    const cameraZ = Math.cos(angle) * distance;
+    const cameraY = size.y * 0.5 + distance * 0.3; // Elevated view
+    
+    this.camera.position.set(cameraX, cameraY, cameraZ);
+    
+    // Look at center of model
+    this.controls.target.copy(center);
     this.controls.update();
+    
+    console.log('Camera framed model:', { 
+      modelSize: size, 
+      maxDim,
+      distance: distance.toFixed(2),
+      cameraPos: this.camera.position, 
+      target: this.controls.target 
+    });
   }
   
   createMixer(model) {
@@ -220,6 +260,10 @@ export class SceneManager {
   
   getMixer() {
     return this.mixer;
+  }
+  
+  getModel() {
+    return this.currentModel;
   }
   
   getCanvas() {
