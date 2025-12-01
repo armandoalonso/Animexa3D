@@ -8,6 +8,7 @@ import { UIManager } from './modules/UIManager.js';
 import { RetargetManager } from './modules/RetargetManager.js';
 import { TextureManager } from './modules/TextureManager.js';
 import { ProjectManager } from './modules/ProjectManager.js';
+import { CameraPresetManager } from './modules/CameraPresetManager.js';
 
 // Initialize managers
 const sceneManager = new SceneManager();
@@ -17,7 +18,8 @@ const exportManager = new ExportManager(sceneManager, animationManager);
 const retargetManager = new RetargetManager(sceneManager, modelLoader, animationManager);
 const textureManager = new TextureManager();
 const projectManager = new ProjectManager(sceneManager, modelLoader, animationManager, textureManager);
-const uiManager = new UIManager(sceneManager, modelLoader, animationManager, exportManager, retargetManager, textureManager, projectManager);
+const cameraPresetManager = new CameraPresetManager(sceneManager);
+const uiManager = new UIManager(sceneManager, modelLoader, animationManager, exportManager, retargetManager, textureManager, projectManager, cameraPresetManager);
 
 // Start the render loop
 sceneManager.startRenderLoop();

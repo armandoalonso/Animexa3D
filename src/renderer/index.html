@@ -155,6 +155,28 @@
         </div>
 
         <div class="control-section">
+          <label class="label">Custom Camera Views</label>
+          <div class="field has-addons" style="margin-bottom: 0.5rem;">
+            <div class="control is-expanded">
+              <div class="select is-fullwidth">
+                <select id="custom-camera-preset">
+                  <option value="">Select Custom View...</option>
+                </select>
+              </div>
+            </div>
+            <div class="control">
+              <button id="btn-delete-camera-preset" class="button is-danger is-small" disabled title="Delete selected preset">
+                <span class="icon">🗑️</span>
+              </button>
+            </div>
+          </div>
+          <button id="btn-save-camera-view" class="button is-primary is-small is-fullwidth">
+            <span class="icon">💾</span>
+            <span>Save Current View</span>
+          </button>
+        </div>
+
+        <div class="control-section">
           <label class="label">
             <input type="checkbox" id="grid-toggle" checked> Show Grid
           </label>
@@ -598,6 +620,27 @@
       </section>
       <footer class="modal-card-foot">
         <button class="button">Close</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Save Camera Preset Modal -->
+  <div id="save-camera-preset-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title">Save Camera View</p>
+        <button class="delete" aria-label="close"></button>
+      </header>
+      <section class="modal-card-body">
+        <div class="field">
+          <label class="label">View Name</label>
+          <input type="text" id="camera-preset-name-input" class="input" placeholder="e.g., Front Close-up" autofocus>
+        </div>
+      </section>
+      <footer class="modal-card-foot">
+        <button id="btn-confirm-save-camera-preset" class="button is-success">Save</button>
+        <button class="button">Cancel</button>
       </footer>
     </div>
   </div>

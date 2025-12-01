@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export class UIManager {
-  constructor(sceneManager, modelLoader, animationManager, exportManager, retargetManager, textureManager, projectManager) {
+  constructor(sceneManager, modelLoader, animationManager, exportManager, retargetManager, textureManager, projectManager, cameraPresetManager) {
     this.sceneManager = sceneManager;
     this.modelLoader = modelLoader;
     this.animationManager = animationManager;
@@ -9,11 +9,13 @@ export class UIManager {
     this.retargetManager = retargetManager;
     this.textureManager = textureManager;
     this.projectManager = projectManager;
+    this.cameraPresetManager = cameraPresetManager;
     
     // Make UIManager globally accessible for other modules
     window.uiManager = this;
     
     this.initEventListeners();
+    this.refreshCustomCameraPresets();
   }
   
   initEventListeners() {
@@ -38,6 +40,11 @@ export class UIManager {
     document.getElementById('bg-color').addEventListener('input', (e) => this.handleBackgroundColor(e));
     document.getElementById('camera-preset').addEventListener('change', (e) => this.handleCameraPreset(e));
     document.getElementById('grid-toggle').addEventListener('change', (e) => this.handleGridToggle(e));
+    
+    // Custom camera preset controls
+    document.getElementById('btn-save-camera-view').addEventListener('click', () => this.handleSaveCameraView());
+    document.getElementById('custom-camera-preset').addEventListener('change', (e) => this.handleLoadCustomPreset(e));
+    document.getElementById('btn-delete-camera-preset').addEventListener('click', () => this.handleDeleteCameraPreset());
     
     // Light controls
     document.getElementById('light-x').addEventListener('input', (e) => this.handleLightPosition());
@@ -78,6 +85,9 @@ export class UIManager {
     document.getElementById('btn-create-mapping').addEventListener('click', () => this.handleCreateMapping());
     document.getElementById('btn-apply-retarget').addEventListener('click', () => this.handleApplyRetarget());
     document.getElementById('btn-confirm-save-mapping').addEventListener('click', () => this.handleConfirmSaveMapping());
+    
+    // Camera preset modal
+    document.getElementById('btn-confirm-save-camera-preset').addEventListener('click', () => this.handleConfirmSaveCameraPreset());
     
     // Add Animation modal
     document.getElementById('btn-load-animation-file').addEventListener('click', () => this.handleLoadAnimationFile());
@@ -2331,6 +2341,145 @@ export class UIManager {
   clearTextureDisplay() {
     const container = document.getElementById('texture-list');
     container.innerHTML = '<div class="empty-state"><p class="has-text-grey">No model loaded</p></div>';
+  }
+
+  /**
+   * Camera Preset Handlers
+   */
+
+  /**
+   * Save current camera view as a custom preset
+   */
+  handleSaveCameraView() {
+    // Open the save preset modal
+    document.getElementById('save-camera-preset-modal').classList.add('is-active');
+    const nameInput = document.getElementById('camera-preset-name-input');
+    nameInput.value = '';
+    
+    // Focus the input after a short delay to ensure modal is rendered
+    setTimeout(() => {
+      nameInput.focus();
+    }, 100);
+    
+    // Add Enter key listener to the input (remove old one first)
+    const newInput = nameInput.cloneNode(true);
+    nameInput.parentNode.replaceChild(newInput, nameInput);
+    
+    newInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('btn-confirm-save-camera-preset').click();
+      }
+    });
+  }
+
+  /**
+   * Confirm and save the camera preset with the entered name
+   */
+  handleConfirmSaveCameraPreset() {
+    const nameInput = document.getElementById('camera-preset-name-input');
+    const name = nameInput.value.trim();
+    
+    if (!name) {
+      this.showNotification('Please enter a name for the camera view', 'warning');
+      return;
+    }
+
+    // Check if preset already exists
+    if (this.cameraPresetManager.hasPreset(name)) {
+      // Show warning notification and don't save
+      this.showNotification(`A preset named "${name}" already exists. Please use a different name.`, 'warning', 4000);
+      return;
+    }
+
+    const success = this.cameraPresetManager.saveCurrentView(name);
+
+    if (success) {
+      this.showNotification(`Camera view "${name}" saved!`, 'success');
+      this.refreshCustomCameraPresets();
+      
+      // Close modal
+      document.getElementById('save-camera-preset-modal').classList.remove('is-active');
+      nameInput.value = '';
+    } else {
+      this.showNotification('Failed to save camera view', 'error');
+    }
+  }
+
+  /**
+   * Load a custom camera preset
+   */
+  handleLoadCustomPreset(event) {
+    const presetName = event.target.value;
+
+    if (!presetName) {
+      return;
+    }
+
+    const success = this.cameraPresetManager.loadPreset(presetName);
+
+    if (success) {
+      this.showNotification(`Loaded camera view "${presetName}"`, 'success', 2000);
+      
+      // Enable delete button
+      document.getElementById('btn-delete-camera-preset').disabled = false;
+    } else {
+      this.showNotification('Failed to load camera preset', 'error');
+    }
+  }
+
+  /**
+   * Delete the currently selected custom camera preset
+   */
+  handleDeleteCameraPreset() {
+    const dropdown = document.getElementById('custom-camera-preset');
+    const presetName = dropdown.value;
+
+    if (!presetName) {
+      return;
+    }
+
+    const success = this.cameraPresetManager.deletePreset(presetName);
+
+    if (success) {
+      this.showNotification(`Camera view "${presetName}" deleted`, 'success');
+      this.refreshCustomCameraPresets();
+      
+      // Disable delete button
+      document.getElementById('btn-delete-camera-preset').disabled = true;
+    } else {
+      this.showNotification('Failed to delete camera preset', 'error');
+    }
+  }
+
+  /**
+   * Refresh the custom camera preset dropdown
+   */
+  refreshCustomCameraPresets() {
+    const dropdown = document.getElementById('custom-camera-preset');
+    const deleteBtn = document.getElementById('btn-delete-camera-preset');
+    const presetNames = this.cameraPresetManager.getPresetNames();
+
+    // Clear existing options except the placeholder
+    dropdown.innerHTML = '<option value="">Select Custom View...</option>';
+
+    // Add all custom presets
+    presetNames.forEach(name => {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      dropdown.appendChild(option);
+    });
+
+    // Reset selection to placeholder
+    dropdown.value = '';
+    deleteBtn.disabled = true;
+
+    // Show/hide the custom preset section based on whether presets exist
+    const customSection = dropdown.closest('.control-section');
+    if (presetNames.length === 0) {
+      // Still show it, but user will see "Select Custom View..." as the only option
+    }
   }
 }
 
