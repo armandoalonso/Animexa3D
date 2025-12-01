@@ -588,11 +588,26 @@
           </div>
           
           <div class="field">
-            <label class="checkbox">
-              <input type="checkbox" id="apply-tpose" />
-              Apply T-Pose Normalization
-            </label>
-            <p class="help">Normalize both skeletons to T-pose before retargeting</p>
+            <label class="label">Pose Normalization</label>
+            <div class="control">
+              <label class="radio">
+                <input type="radio" name="pose-normalization" value="none" checked>
+                None
+              </label>
+            </div>
+            <div class="control">
+              <label class="radio">
+                <input type="radio" name="pose-normalization" value="tpose">
+                T-Pose
+              </label>
+            </div>
+            <div class="control">
+              <label class="radio">
+                <input type="radio" name="pose-normalization" value="apose">
+                A-Pose
+              </label>
+            </div>
+            <p class="help">Normalize both skeletons to the same pose before retargeting. Use when source and target have different rest poses (e.g., T-pose source → A-pose target).</p>
           </div>
           
           <div class="field">
@@ -609,6 +624,14 @@
               Preserve Root Motion
             </label>
             <p class="help">Keep root/hip position and movement from the source animation (important for walk cycles, running, etc.)</p>
+          </div>
+          
+          <div class="field">
+            <label class="checkbox">
+              <input type="checkbox" id="ue5-rotation-fix" />
+              UE5 Rotation Correction
+            </label>
+            <p class="help">Apply -90° rotation fix for Unreal Engine animations (use if character faces wrong direction)</p>
           </div>
         </div>
 
@@ -929,11 +952,26 @@
                 </div>
                 
                 <div class="field">
-                  <label class="checkbox">
-                    <input type="checkbox" id="inline-apply-tpose" />
-                    Apply T-Pose Normalization
-                  </label>
-                  <p class="help is-size-7">Normalize both skeletons to T-pose before retargeting</p>
+                  <label class="label is-small">Pose Normalization</label>
+                  <div class="control">
+                    <label class="radio">
+                      <input type="radio" name="pose-normalization-inline" value="none" checked>
+                      None
+                    </label>
+                  </div>
+                  <div class="control">
+                    <label class="radio">
+                      <input type="radio" name="pose-normalization-inline" value="tpose">
+                      T-Pose
+                    </label>
+                  </div>
+                  <div class="control">
+                    <label class="radio">
+                      <input type="radio" name="pose-normalization-inline" value="apose">
+                      A-Pose
+                    </label>
+                  </div>
+                  <p class="help is-size-7">Normalize both skeletons to the same pose before retargeting</p>
                 </div>
                 
                 <div class="field">

@@ -1045,9 +1045,10 @@ export class UIManager {
     // Read retargeting options from UI
     const sourcePoseMode = parseInt(document.getElementById('source-pose-mode').value);
     const targetPoseMode = parseInt(document.getElementById('target-pose-mode').value);
-    const applyTPose = document.getElementById('apply-tpose').checked;
+    const poseNormalization = document.querySelector('input[name="pose-normalization"]:checked')?.value || 'none';
     const embedTransforms = document.getElementById('embed-transforms').checked;
     const preserveRootMotion = document.getElementById('preserve-root-motion').checked;
+    const applyUE5RotationFix = document.getElementById('ue5-rotation-fix').checked;
     
     console.log('Retargeting with options:', {
       sourceAnimationCount: sourceModelData.animations.length,
@@ -1055,9 +1056,10 @@ export class UIManager {
       boneMapping: Object.keys(this.retargetManager.boneMapping).length + ' bones mapped',
       sourcePoseMode,
       targetPoseMode,
-      applyTPose,
+      poseNormalization,
       embedTransforms,
-      preserveRootMotion
+      preserveRootMotion,
+      applyUE5RotationFix
     });
     
     // If preserving root motion, ensure root bones are mapped
@@ -1079,48 +1081,62 @@ export class UIManager {
       }
     }
     
-    // Apply T-pose normalization BEFORE initializing if requested
-    if (applyTPose) {
-      console.log('Applying T-pose normalization to bind poses...');
+    // Set UE5 rotation correction flag
+    this.retargetManager.applyCoordinateCorrection = applyUE5RotationFix;
+    
+    // Apply pose normalization BEFORE initializing if requested
+    if (poseNormalization !== 'none') {
+      console.log(`Applying ${poseNormalization.toUpperCase()} normalization to bind poses...`);
       try {
         const sourceSkeleton = this.retargetManager.getSourceSkeleton();
         const targetSkeleton = this.retargetManager.getTargetSkeleton();
         
         if (sourceSkeleton) {
-          this.retargetManager.applyTPose(sourceSkeleton);
-          console.log('✓ Source skeleton normalized to T-pose');
+          if (poseNormalization === 'tpose') {
+            this.retargetManager.applyTPose(sourceSkeleton);
+            console.log('✓ Source skeleton normalized to T-pose');
+          } else if (poseNormalization === 'apose') {
+            this.retargetManager.applyAPose(sourceSkeleton);
+            console.log('✓ Source skeleton normalized to A-pose');
+          }
         } else {
-          console.warn('Could not get source skeleton for T-pose');
+          console.warn('Could not get source skeleton for pose normalization');
         }
         
         if (targetSkeleton) {
-          this.retargetManager.applyTPose(targetSkeleton);
-          console.log('✓ Target skeleton normalized to T-pose');
+          if (poseNormalization === 'tpose') {
+            this.retargetManager.applyTPose(targetSkeleton);
+            console.log('✓ Target skeleton normalized to T-pose');
+          } else if (poseNormalization === 'apose') {
+            this.retargetManager.applyAPose(targetSkeleton);
+            console.log('✓ Target skeleton normalized to A-pose');
+          }
         } else {
-          console.warn('Could not get target skeleton for T-pose');
+          console.warn('Could not get target skeleton for pose normalization');
         }
-      } catch (tposeError) {
-        console.error('T-pose normalization error:', tposeError);
+      } catch (poseError) {
+        console.error('Pose normalization error:', poseError);
         this.showNotification(
-          'Warning: T-pose normalization failed, proceeding without it',
+          `Warning: ${poseNormalization.toUpperCase()} normalization failed, proceeding without it`,
           'warning'
         );
       }
     }
     
     // Initialize retargeting with options
-    // If T-pose was applied, use CURRENT mode to capture the T-posed skeleton
+    // If pose normalization was applied, use CURRENT mode to capture the normalized skeleton
     try {
+      const usePoseNormalization = poseNormalization !== 'none';
       const options = {
-        srcPoseMode: applyTPose ? 1 : sourcePoseMode, // 1 = CURRENT if T-posed
-        trgPoseMode: applyTPose ? 1 : targetPoseMode, // 1 = CURRENT if T-posed
+        srcPoseMode: usePoseNormalization ? 1 : sourcePoseMode, // 1 = CURRENT if normalized
+        trgPoseMode: usePoseNormalization ? 1 : targetPoseMode, // 1 = CURRENT if normalized
         srcEmbedWorld: embedTransforms,
         trgEmbedWorld: embedTransforms
       };
       
       console.log('Initializing with pose modes:', {
-        source: applyTPose ? 'CURRENT (T-posed)' : (sourcePoseMode === 0 ? 'DEFAULT' : 'CURRENT'),
-        target: applyTPose ? 'CURRENT (T-posed)' : (targetPoseMode === 0 ? 'DEFAULT' : 'CURRENT')
+        source: usePoseNormalization ? `CURRENT (${poseNormalization.toUpperCase()})` : (sourcePoseMode === 0 ? 'DEFAULT' : 'CURRENT'),
+        target: usePoseNormalization ? `CURRENT (${poseNormalization.toUpperCase()})` : (targetPoseMode === 0 ? 'DEFAULT' : 'CURRENT')
       });
       
       this.retargetManager.initializeRetargeting(
@@ -1932,9 +1948,10 @@ export class UIManager {
       // Read retargeting options from UI (same as main window)
       const sourcePoseMode = parseInt(document.getElementById('inline-source-pose-mode').value);
       const targetPoseMode = parseInt(document.getElementById('inline-target-pose-mode').value);
-      const applyTPose = document.getElementById('inline-apply-tpose').checked;
+      const poseNormalization = document.querySelector('input[name="pose-normalization-inline"]:checked')?.value || 'none';
       const embedTransforms = document.getElementById('inline-embed-transforms').checked;
       const preserveRootMotion = document.getElementById('preserve-hip-position-inline').checked;
+      const applyUE5RotationFix = document.getElementById('ue5-rotation-fix-inline').checked;
       
       console.log('=== ROBUST RETARGETING ANIMATION (MODAL) ===');
       console.log('Bone mapping (current->anim):', this.inlineBoneMapping);
@@ -1943,9 +1960,10 @@ export class UIManager {
       console.log('Options:', {
         sourcePoseMode,
         targetPoseMode,
-        applyTPose,
+        poseNormalization,
         embedTransforms,
-        preserveRootMotion
+        preserveRootMotion,
+        applyUE5RotationFix
       });
       
       // Invert the bone mapping for retargeting
@@ -2004,47 +2022,61 @@ export class UIManager {
         // Apply bone mapping
         this.retargetManager.boneMapping = invertedMapping;
         
-        // Apply T-pose normalization BEFORE initializing if requested
-        if (applyTPose) {
-          console.log('Applying T-pose normalization to bind poses...');
+        // Set UE5 rotation correction flag
+        this.retargetManager.applyCoordinateCorrection = applyUE5RotationFix;
+        
+        // Apply pose normalization BEFORE initializing if requested
+        if (poseNormalization !== 'none') {
+          console.log(`Applying ${poseNormalization.toUpperCase()} normalization to bind poses...`);
           try {
             const sourceSkeleton = this.retargetManager.getSourceSkeleton();
             const targetSkeleton = this.retargetManager.getTargetSkeleton();
             
             if (sourceSkeleton) {
-              this.retargetManager.applyTPose(sourceSkeleton);
-              console.log('✓ Source skeleton normalized to T-pose');
+              if (poseNormalization === 'tpose') {
+                this.retargetManager.applyTPose(sourceSkeleton);
+                console.log('✓ Source skeleton normalized to T-pose');
+              } else if (poseNormalization === 'apose') {
+                this.retargetManager.applyAPose(sourceSkeleton);
+                console.log('✓ Source skeleton normalized to A-pose');
+              }
             } else {
-              console.warn('Could not get source skeleton for T-pose');
+              console.warn('Could not get source skeleton for pose normalization');
             }
             
             if (targetSkeleton) {
-              this.retargetManager.applyTPose(targetSkeleton);
-              console.log('✓ Target skeleton normalized to T-pose');
+              if (poseNormalization === 'tpose') {
+                this.retargetManager.applyTPose(targetSkeleton);
+                console.log('✓ Target skeleton normalized to T-pose');
+              } else if (poseNormalization === 'apose') {
+                this.retargetManager.applyAPose(targetSkeleton);
+                console.log('✓ Target skeleton normalized to A-pose');
+              }
             } else {
-              console.warn('Could not get target skeleton for T-pose');
+              console.warn('Could not get target skeleton for pose normalization');
             }
-          } catch (tposeError) {
-            console.error('T-pose normalization error:', tposeError);
+          } catch (poseError) {
+            console.error('Pose normalization error:', poseError);
             this.showNotification(
-              'Warning: T-pose normalization failed, proceeding without it',
+              `Warning: ${poseNormalization.toUpperCase()} normalization failed, proceeding without it`,
               'warning'
             );
           }
         }
         
         // Initialize retargeting with options (same as main window)
-        // If T-pose was applied, use CURRENT mode to capture the T-posed skeleton
+        // If pose normalization was applied, use CURRENT mode to capture the normalized skeleton
+        const usePoseNormalization = poseNormalization !== 'none';
         const options = {
-          srcPoseMode: applyTPose ? 1 : sourcePoseMode, // 1 = CURRENT if T-posed
-          trgPoseMode: applyTPose ? 1 : targetPoseMode, // 1 = CURRENT if T-posed
+          srcPoseMode: usePoseNormalization ? 1 : sourcePoseMode, // 1 = CURRENT if normalized
+          trgPoseMode: usePoseNormalization ? 1 : targetPoseMode, // 1 = CURRENT if normalized
           srcEmbedWorld: embedTransforms,
           trgEmbedWorld: embedTransforms
         };
         
         console.log('Initializing with pose modes:', {
-          source: applyTPose ? 'CURRENT (T-posed)' : (sourcePoseMode === 0 ? 'DEFAULT' : 'CURRENT'),
-          target: applyTPose ? 'CURRENT (T-posed)' : (targetPoseMode === 0 ? 'DEFAULT' : 'CURRENT')
+          source: usePoseNormalization ? `CURRENT (${poseNormalization.toUpperCase()})` : (sourcePoseMode === 0 ? 'DEFAULT' : 'CURRENT'),
+          target: usePoseNormalization ? `CURRENT (${poseNormalization.toUpperCase()})` : (targetPoseMode === 0 ? 'DEFAULT' : 'CURRENT')
         });
         
         this.retargetManager.initializeRetargeting(options);

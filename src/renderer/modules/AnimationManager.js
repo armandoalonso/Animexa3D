@@ -12,7 +12,10 @@ export class AnimationManager {
   
   loadAnimations(animations) {
     console.log('AnimationManager.loadAnimations called with:', animations.map(a => a.name));
-    this.animations = animations;
+    
+    // Trim empty space from the start of animations
+    this.animations = animations.map(clip => this.trimAnimationClip(clip));
+    
     this.currentAction = null;
     this.currentAnimationIndex = -1;
     this.isPlaying = false;
@@ -20,6 +23,56 @@ export class AnimationManager {
     this.populateAnimationList();
     this.updateTimelineUI();
     console.log('After loading, this.animations:', this.animations.map(a => a.name));
+  }
+  
+  /**
+   * Trim empty space from the start of an animation clip
+   * @param {THREE.AnimationClip} clip - The animation clip to trim
+   * @returns {THREE.AnimationClip} - The trimmed clip
+   */
+  trimAnimationClip(clip) {
+    // Find the earliest keyframe across all tracks
+    let earliestKeyframe = Infinity;
+    
+    clip.tracks.forEach(track => {
+      if (track.times && track.times.length > 0) {
+        earliestKeyframe = Math.min(earliestKeyframe, track.times[0]);
+      }
+    });
+    
+    // If animation starts at or near 0, no trimming needed
+    if (earliestKeyframe < 0.01 || earliestKeyframe === Infinity) {
+      return clip;
+    }
+    
+    console.log(`✂️ Trimming ${earliestKeyframe.toFixed(3)}s from start of "${clip.name}"`);
+    
+    // Create new tracks with shifted times
+    const newTracks = clip.tracks.map(track => {
+      if (!track.times || track.times.length === 0) {
+        return track;
+      }
+      
+      // Shift all keyframe times by subtracting the earliest time
+      const newTimes = track.times.map(t => t - earliestKeyframe);
+      
+      // Create new track with shifted times
+      const TrackConstructor = track.constructor;
+      return new TrackConstructor(
+        track.name,
+        newTimes,
+        track.values.slice(), // Copy values array
+        track.interpolation
+      );
+    });
+    
+    // Create new clip with trimmed duration
+    const newDuration = clip.duration - earliestKeyframe;
+    const trimmedClip = new THREE.AnimationClip(clip.name, newDuration, newTracks);
+    
+    console.log(`   Original: ${clip.duration.toFixed(3)}s → Trimmed: ${newDuration.toFixed(3)}s`);
+    
+    return trimmedClip;
   }
   
   populateAnimationList() {

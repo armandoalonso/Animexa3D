@@ -46,6 +46,13 @@ export class RetargetManager {
     // User-selected root bones (override auto-detection)
     this.selectedSourceRootBone = null;
     this.selectedTargetRootBone = null;
+    
+    // Coordinate system correction (for Unreal Engine imports)
+    // Unreal uses X-forward, most others use Z-forward
+    this.applyCoordinateCorrection = false; // Controlled by UI checkbox
+    this.coordinateCorrectionRotation = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(0, -Math.PI / 2, 0) // -90 degrees around Y axis
+    );
   }
   
   /**
@@ -1209,12 +1216,31 @@ export class RetargetManager {
       return null;
     }
     
+    // Check if this is the root bone (needs coordinate system correction)
+    const effectiveSourceRoot = this.getEffectiveSourceRootBone();
+    const isRootBone = effectiveSourceRoot && boneName === effectiveSourceRoot;
+    
     const quat = new THREE.Quaternion(0, 0, 0, 1);
     const srcValues = srcTrack.values;
     const trgValues = new Float32Array(srcValues.length);
     
+    // Temp quaternion for coordinate correction
+    const correctedQuat = new THREE.Quaternion();
+    const invCorrection = this.coordinateCorrectionRotation.clone().invert();
+    
     for (let i = 0; i < srcValues.length; i += 4) {
       quat.set(srcValues[i], srcValues[i + 1], srcValues[i + 2], srcValues[i + 3]);
+      
+      // Apply coordinate system correction to root bone if enabled
+      if (isRootBone && this.applyCoordinateCorrection) {
+        // Transform: correctionInverse * sourceRotation * correction
+        // This converts from Unreal's X-forward to Z-forward coordinate system
+        correctedQuat.copy(invCorrection);
+        correctedQuat.multiply(quat);
+        correctedQuat.multiply(this.coordinateCorrectionRotation);
+        quat.copy(correctedQuat);
+      }
+      
       this.retargetQuaternion(boneIndex, quat, quat);
       trgValues[i] = quat.x;
       trgValues[i + 1] = quat.y;
@@ -1327,6 +1353,11 @@ export class RetargetManager {
       // Calculate the movement delta from source bind pose
       const movementDelta = new THREE.Vector3();
       movementDelta.subVectors(animPos, srcBindLocalPos);
+      
+      // Apply coordinate system correction if enabled (rotate movement vector)
+      if (this.applyCoordinateCorrection) {
+        movementDelta.applyQuaternion(this.coordinateCorrectionRotation);
+      }
       
       // Scale the movement by proportion ratio
       movementDelta.multiplyScalar(this.proportionRatio);
@@ -1863,6 +1894,101 @@ export class RetargetManager {
     skeleton.bones[0].updateMatrixWorld(true, true);
     
     console.log('T-Pose applied successfully');
+    
+    return { skeleton, map: boneMap };
+  }
+
+  /**
+   * Apply A-Pose normalization to skeleton
+   * A-pose has arms at ~45 degree angle downward instead of horizontal (T-pose)
+   * @param {THREE.Skeleton} skeleton - The skeleton to normalize
+   * @param {Object} boneMap - Optional bone name mapping
+   * @returns {Object} - { skeleton, map: boneMap }
+   */
+  applyAPose(skeleton, boneMap = null) {
+    if (!boneMap) {
+      // Use automatic bone detection (same as T-pose)
+      boneMap = this.detectTPoseBones(skeleton);
+    }
+    
+    console.log('Applying A-Pose with bone map:', boneMap);
+    
+    // Define standard axes
+    const y_axis = new THREE.Vector3(0, 1, 0);
+    const neg_y_axis = new THREE.Vector3(0, -1, 0);
+    const z_axis = new THREE.Vector3(0, 0, 1);
+    
+    // A-pose arm directions: 45 degrees down from horizontal
+    // Left arm: +X and -Y (pointing left and down)
+    // Right arm: -X and -Y (pointing right and down)
+    const left_arm_axis = new THREE.Vector3(1, -1, 0).normalize();  // 45° down-left
+    const right_arm_axis = new THREE.Vector3(-1, -1, 0).normalize(); // 45° down-right
+    
+    // Extend spine chain
+    if (boneMap.Hips && boneMap.Spine) {
+      this.extendChain(skeleton, boneMap.Hips, boneMap.Spine);
+    }
+    
+    // Extend limb chains
+    const limbs = [
+      [boneMap.LeftUpLeg, boneMap.LeftFoot],
+      [boneMap.RightUpLeg, boneMap.RightFoot],
+      [boneMap.LeftArm, boneMap.LeftHand],
+      [boneMap.RightArm, boneMap.RightHand]
+    ];
+    
+    for (const [start, end] of limbs) {
+      if (start && end) {
+        this.extendChain(skeleton, start, end);
+      }
+    }
+    
+    // Align spine to Y axis
+    if (boneMap.Hips && boneMap.Spine) {
+      this.alignBoneToAxis(skeleton, boneMap.Hips, boneMap.Spine, y_axis);
+    }
+    
+    // Align legs down Y axis
+    if (boneMap.LeftUpLeg && boneMap.LeftFoot) {
+      this.alignBoneToAxis(skeleton, boneMap.LeftUpLeg, boneMap.LeftFoot, neg_y_axis);
+    }
+    if (boneMap.RightUpLeg && boneMap.RightFoot) {
+      this.alignBoneToAxis(skeleton, boneMap.RightUpLeg, boneMap.RightFoot, neg_y_axis);
+    }
+    
+    // Align arms to 45° angle (A-pose characteristic)
+    // Left arm points to character's left and down (+X, -Y)
+    // Right arm points to character's right and down (-X, -Y)
+    if (boneMap.LeftArm && boneMap.LeftHand) {
+      console.log('Aligning left arm to 45° down-left axis');
+      this.alignBoneToAxis(skeleton, boneMap.LeftArm, boneMap.LeftHand, left_arm_axis);
+    }
+    if (boneMap.RightArm && boneMap.RightHand) {
+      console.log('Aligning right arm to 45° down-right axis');
+      this.alignBoneToAxis(skeleton, boneMap.RightArm, boneMap.RightHand, right_arm_axis);
+    }
+    
+    // Optional: Align character to face Z axis
+    if (boneMap.RightArm && boneMap.LeftArm && boneMap.Spine) {
+      const rightArmBone = skeleton.bones.find(b => b.name === boneMap.RightArm);
+      const leftArmBone = skeleton.bones.find(b => b.name === boneMap.LeftArm);
+      const spineBone = skeleton.bones.find(b => b.name === boneMap.Spine);
+      
+      if (rightArmBone && leftArmBone && spineBone) {
+        const rArmPos = rightArmBone.getWorldPosition(new THREE.Vector3());
+        const lArmPos = leftArmBone.getWorldPosition(new THREE.Vector3());
+        
+        const arms_dir = new THREE.Vector3();
+        arms_dir.subVectors(lArmPos, rArmPos).normalize();
+        
+        this.lookBoneAtAxis(skeleton.bones[0], arms_dir, y_axis, z_axis);
+      }
+    }
+    
+    // Update skeleton
+    skeleton.bones[0].updateMatrixWorld(true, true);
+    
+    console.log('A-Pose applied successfully');
     
     return { skeleton, map: boneMap };
   }
