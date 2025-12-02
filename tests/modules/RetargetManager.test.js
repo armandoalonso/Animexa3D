@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { RetargetManager, BindPoseModes } from '@renderer/modules/RetargetManager.js';
+import { RetargetManager, BindPoseModes } from '@renderer/modules/retargeting/RetargetManager.js';
 import * as THREE from 'three';
 import {
   createMockSkeleton,

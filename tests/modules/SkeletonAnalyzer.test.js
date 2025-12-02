@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SkeletonAnalyzer } from '@renderer/modules/SkeletonAnalyzer.js';
+import { SkeletonAnalyzer } from '@renderer/modules/retargeting/SkeletonAnalyzer.js';
 import * as THREE from 'three';
 import {
   createMockSkeleton,

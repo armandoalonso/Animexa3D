@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { RetargetingEngine, BindPoseModes } from '@renderer/modules/RetargetingEngine.js';
-import { SkeletonAnalyzer } from '@renderer/modules/SkeletonAnalyzer.js';
+import { RetargetingEngine, BindPoseModes } from '@renderer/modules/retargeting/RetargetingEngine.js';
+import { SkeletonAnalyzer } from '@renderer/modules/retargeting/SkeletonAnalyzer.js';
 import * as THREE from 'three';
 import { createMockSkeleton } from '../utils/testHelpers.js';
 

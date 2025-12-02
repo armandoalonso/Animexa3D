@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { CoordinateSystemDetector } from '@renderer/modules/CoordinateSystemDetector.js';
+import { CoordinateSystemDetector } from '@renderer/modules/core/CoordinateSystemDetector.js';
 import * as THREE from 'three';
 
 describe('CoordinateSystemDetector', () => {

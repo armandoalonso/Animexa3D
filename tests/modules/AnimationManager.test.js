@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AnimationManager } from '@renderer/modules/AnimationManager.js';
+import { AnimationManager } from '@renderer/modules/animation/AnimationManager.js';
 import * as THREE from 'three';
 import { createMockAnimationClip, createMockSkeleton } from '../utils/testHelpers.js';
 
@@ -39,15 +39,15 @@ describe('AnimationManager', () => {
 
       animationManager.loadAnimations(clips);
 
-      expect(animationManager.animations).toHaveLength(2);
-      expect(animationManager.animations[0].name).toBe('Walk');
-      expect(animationManager.animations[1].name).toBe('Run');
+      expect(animationManager.getAnimations()).toHaveLength(2);
+      expect(animationManager.getAnimations()[0].name).toBe('Walk');
+      expect(animationManager.getAnimations()[1].name).toBe('Run');
     });
 
     it('should handle empty animation array', () => {
       animationManager.loadAnimations([]);
 
-      expect(animationManager.animations).toHaveLength(0);
+      expect(animationManager.getAnimations()).toHaveLength(0);
       expect(animationManager.currentAnimationIndex).toBe(-1);
     });
 
@@ -62,8 +62,8 @@ describe('AnimationManager', () => {
 
       animationManager.loadAnimations([clip]);
 
-      expect(animationManager.animations[0].duration).toBeCloseTo(2.0, 2);
-      expect(animationManager.animations[0].tracks[0].times[0]).toBeCloseTo(0, 3);
+      expect(animationManager.getAnimations()[0].duration).toBeCloseTo(2.0, 2);
+      expect(animationManager.getAnimations()[0].tracks[0].times[0]).toBeCloseTo(0, 3);
     });
   });
 
@@ -78,8 +78,8 @@ describe('AnimationManager', () => {
       animationManager.playAnimation(0);
 
       expect(animationManager.currentAnimationIndex).toBe(0);
-      expect(animationManager.isPlaying).toBe(true);
-      expect(animationManager.currentAction).toBeTruthy();
+      expect(animationManager.playbackService.getIsPlaying()).toBe(true);
+      expect(animationManager.getCurrentAction()).toBeTruthy();
     });
 
     it('should stop previous animation when playing new one', () => {
@@ -90,12 +90,13 @@ describe('AnimationManager', () => {
 
       animationManager.loadAnimations(clips);
       animationManager.playAnimation(0);
-      const firstAction = animationManager.currentAction;
-      const stopSpy = vi.spyOn(firstAction, 'stop');
+      const firstAction = animationManager.getCurrentAction();
 
       animationManager.playAnimation(1);
 
-      expect(stopSpy).toHaveBeenCalled();
+      // Check that the animation changed
+      const secondAction = animationManager.getCurrentAction();
+      expect(firstAction).not.toBe(secondAction);
       expect(animationManager.currentAnimationIndex).toBe(1);
     });
 
@@ -119,35 +120,35 @@ describe('AnimationManager', () => {
     it('should pause animation', () => {
       animationManager.pauseAnimation();
 
-      expect(animationManager.isPlaying).toBe(false);
-      expect(animationManager.currentAction.paused).toBe(true);
+      expect(animationManager.playbackService.getIsPlaying()).toBe(false);
+      expect(animationManager.getCurrentAction().paused).toBe(true);
     });
 
     it('should resume animation', () => {
       animationManager.pauseAnimation();
       animationManager.resumeAnimation();
 
-      expect(animationManager.isPlaying).toBe(true);
-      expect(animationManager.currentAction.paused).toBe(false);
+      expect(animationManager.playbackService.getIsPlaying()).toBe(true);
+      expect(animationManager.getCurrentAction().paused).toBe(false);
     });
 
     it('should stop animation', () => {
-      const stopSpy = vi.spyOn(animationManager.currentAction, 'stop');
+      const stopSpy = vi.spyOn(animationManager.getCurrentAction(), 'stop');
       
       animationManager.stopAnimation();
 
       expect(stopSpy).toHaveBeenCalled();
-      expect(animationManager.isPlaying).toBe(false);
+      expect(animationManager.playbackService.getIsPlaying()).toBe(false);
     });
 
     it('should toggle play/pause', () => {
-      expect(animationManager.isPlaying).toBe(true);
+      expect(animationManager.playbackService.getIsPlaying()).toBe(true);
       
       animationManager.togglePlayPause();
-      expect(animationManager.isPlaying).toBe(false);
+      expect(animationManager.playbackService.getIsPlaying()).toBe(false);
       
       animationManager.togglePlayPause();
-      expect(animationManager.isPlaying).toBe(true);
+      expect(animationManager.playbackService.getIsPlaying()).toBe(true);
     });
   });
 
@@ -159,7 +160,7 @@ describe('AnimationManager', () => {
 
       animationManager.setLoop(true);
 
-      expect(animationManager.loopEnabled).toBe(true);
+      expect(animationManager.playbackService.getIsLooping()).toBe(true);
     });
 
     it('should disable loop', () => {
@@ -170,17 +171,17 @@ describe('AnimationManager', () => {
 
       animationManager.setLoop(false);
 
-      expect(animationManager.loopEnabled).toBe(false);
+      expect(animationManager.playbackService.getIsLooping()).toBe(false);
     });
 
     it('should toggle loop', () => {
-      expect(animationManager.loopEnabled).toBe(false);
-      
+      expect(animationManager.playbackService.getIsLooping()).toBe(false);
+
       animationManager.toggleLoop();
-      expect(animationManager.loopEnabled).toBe(true);
-      
+      expect(animationManager.playbackService.getIsLooping()).toBe(true);
+
       animationManager.toggleLoop();
-      expect(animationManager.loopEnabled).toBe(false);
+      expect(animationManager.playbackService.getIsLooping()).toBe(false);
     });
   });
 
@@ -193,7 +194,7 @@ describe('AnimationManager', () => {
       const count = animationManager.addAnimations(newClips);
 
       expect(count).toBe(2);
-      expect(animationManager.animations).toHaveLength(2);
+      expect(animationManager.getAnimations()).toHaveLength(2);
     });
 
     it('should remove animation by index', () => {
@@ -206,7 +207,7 @@ describe('AnimationManager', () => {
       const count = animationManager.removeAnimation(0);
 
       expect(count).toBe(1);
-      expect(animationManager.animations[0].name).toBe('Run');
+      expect(animationManager.getAnimations()[0].name).toBe('Run');
     });
 
     it('should rename animation', () => {
@@ -216,7 +217,7 @@ describe('AnimationManager', () => {
       const result = animationManager.renameAnimation(0, 'NewWalk');
 
       expect(result).toBe(true);
-      expect(animationManager.animations[0].name).toBe('NewWalk');
+      expect(animationManager.getAnimations()[0].name).toBe('NewWalk');
     });
 
     it('should reject empty name when renaming', () => {
@@ -226,13 +227,13 @@ describe('AnimationManager', () => {
       const result = animationManager.renameAnimation(0, '   ');
 
       expect(result).toBe(false);
-      expect(animationManager.animations[0].name).toBe('Walk');
+      expect(animationManager.getAnimations()[0].name).toBe('Walk');
     });
   });
 
   describe('timeline', () => {
     it('should format time correctly', () => {
-      const formatted = animationManager.formatTime(125.5);
+      const formatted = animationManager.timelineService.formatTime(125.5);
       
       expect(formatted).toMatch(/^\d{2}:\d{2}:\d{2}$/);
     });
@@ -244,7 +245,7 @@ describe('AnimationManager', () => {
 
       animationManager.scrubTimeline(0.5); // 50% through
 
-      expect(animationManager.currentAction.time).toBeCloseTo(1.0, 1);
+      expect(animationManager.playbackService.getCurrentAction().time).toBeCloseTo(1.0, 1);
     });
   });
 

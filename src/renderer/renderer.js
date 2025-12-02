@@ -1,14 +1,14 @@
 import 'bulma/css/bulma.min.css';
 import * as THREE from 'three';
-import { SceneManager } from './modules/SceneManager.js';
-import { ModelLoader } from './modules/ModelLoader.js';
-import { AnimationManager } from './modules/AnimationManager.js';
-import { ExportManager } from './modules/ExportManager.js';
-import { UIManager } from './modules/UIManager.js';
-import { RetargetManager } from './modules/RetargetManager.js';
-import { TextureManager } from './modules/TextureManager.js';
-import { ProjectManager } from './modules/ProjectManager.js';
-import { CameraPresetManager } from './modules/CameraPresetManager.js';
+import { SceneManager } from './modules/core/SceneManager.js';
+import { ModelLoader } from './modules/io/ModelLoader.js';
+import { AnimationManager } from './modules/animation/AnimationManager.js';
+import { ExportManager } from './modules/io/ExportManager.js';
+import { UIManager } from './modules/ui/UIManager.js';
+import { RetargetManager } from './modules/retargeting/RetargetManager.js';
+import { TextureManager } from './modules/io/TextureManager.js';
+import { ProjectManager } from './modules/io/ProjectManager.js';
+import { CameraPresetManager } from './modules/core/CameraPresetManager.js';
 
 // Initialize managers
 const sceneManager = new SceneManager();

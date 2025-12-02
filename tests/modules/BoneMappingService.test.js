@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { BoneMappingService } from '@renderer/modules/BoneMappingService.js';
+import { BoneMappingService } from '@renderer/modules/retargeting/BoneMappingService.js';
 import { getHumanoidBoneNames } from '../utils/testHelpers.js';
 
 describe('BoneMappingService', () => {

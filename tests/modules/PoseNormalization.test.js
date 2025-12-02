@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { PoseNormalization } from '@renderer/modules/PoseNormalization.js';
-import { SkeletonAnalyzer } from '@renderer/modules/SkeletonAnalyzer.js';
+import { PoseNormalization } from '@renderer/modules/retargeting/PoseNormalization.js';
+import { SkeletonAnalyzer } from '@renderer/modules/retargeting/SkeletonAnalyzer.js';
 import * as THREE from 'three';
 import { createMockSkeleton } from '../utils/testHelpers.js';
 

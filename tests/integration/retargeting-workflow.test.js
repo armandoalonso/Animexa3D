@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AnimationManager } from '@renderer/modules/AnimationManager.js';
-import { RetargetManager } from '@renderer/modules/RetargetManager.js';
-import { ModelLoader } from '@renderer/modules/ModelLoader.js';
+import { AnimationManager } from '@renderer/modules/animation/AnimationManager.js';
+import { RetargetManager } from '@renderer/modules/retargeting/RetargetManager.js';
+import { ModelLoader } from '@renderer/modules/io/ModelLoader.js';
 import * as THREE from 'three';
 import {
   createMockModel,
@@ -120,17 +120,17 @@ describe('Animation Retargeting Integration', () => {
       ];
 
       animationManager.loadAnimations(clips);
-      expect(animationManager.animations).toHaveLength(2);
+      expect(animationManager.getAnimations()).toHaveLength(2);
 
       animationManager.playAnimation(0);
-      expect(animationManager.isPlaying).toBe(true);
+      expect(animationManager.playbackService.getIsPlaying()).toBe(true);
       expect(animationManager.currentAnimationIndex).toBe(0);
 
       animationManager.changeAnimation(1);
       expect(animationManager.currentAnimationIndex).toBe(1);
 
       animationManager.pauseAnimation();
-      expect(animationManager.isPlaying).toBe(false);
+      expect(animationManager.playbackService.getIsPlaying()).toBe(false);
     });
 
     it('should add animations from external file', () => {
@@ -145,9 +145,9 @@ describe('Animation Retargeting Integration', () => {
       ];
       animationManager.addAnimations(newClips);
 
-      expect(animationManager.animations).toHaveLength(3);
-      expect(animationManager.animations[1].name).toBe('Jump');
-      expect(animationManager.animations[2].name).toBe('Dance');
+      expect(animationManager.getAnimations()).toHaveLength(3);
+      expect(animationManager.getAnimations()[1].name).toBe('Jump');
+      expect(animationManager.getAnimations()[2].name).toBe('Dance');
     });
   });
 
@@ -194,8 +194,8 @@ describe('Animation Retargeting Integration', () => {
 
     it('should handle empty animation list', () => {
       animationManager.loadAnimations([]);
-      
-      expect(animationManager.animations).toHaveLength(0);
+
+      expect(animationManager.getAnimations()).toHaveLength(0);
       expect(animationManager.hasAnimations()).toBe(false);
     });
 
@@ -211,9 +211,9 @@ describe('Animation Retargeting Integration', () => {
       // Remove currently playing animation
       animationManager.removeAnimation(0);
 
-      expect(animationManager.animations).toHaveLength(1);
+      expect(animationManager.getAnimations()).toHaveLength(1);
       expect(animationManager.currentAnimationIndex).toBe(-1);
-      expect(animationManager.isPlaying).toBe(false);
+      expect(animationManager.playbackService.getIsPlaying()).toBe(false);
     });
   });
 
@@ -266,7 +266,7 @@ describe('Animation Retargeting Integration', () => {
       const duration = Date.now() - startTime;
 
       expect(duration).toBeLessThan(500); // Should be fast
-      expect(animationManager.animations).toHaveLength(10);
+      expect(animationManager.getAnimations()).toHaveLength(10);
     });
   });
 });

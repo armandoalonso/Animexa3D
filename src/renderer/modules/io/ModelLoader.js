@@ -1,7 +1,7 @@
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import * as THREE from 'three';
-import { CoordinateSystemDetector } from './CoordinateSystemDetector.js';
+import { CoordinateSystemDetector } from '../core/CoordinateSystemDetector.js';
 
 export class ModelLoader {
   constructor(sceneManager) {

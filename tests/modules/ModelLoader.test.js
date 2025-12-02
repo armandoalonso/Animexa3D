@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ModelLoader } from '@renderer/modules/ModelLoader.js';
+import { ModelLoader } from '@renderer/modules/io/ModelLoader.js';
 import * as THREE from 'three';
 
 describe('ModelLoader', () => {
