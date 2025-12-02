@@ -279,16 +279,24 @@ export class ExportManager {
       const originalPosition = model.position.clone();
       const originalRotation = model.rotation.clone();
       
-      // Temporarily reset transform for export
+      // Temporarily reset scale and position, but KEEP rotation to bake it into export
       model.scale.set(1, 1, 1);
       model.position.set(0, 0, 0);
-      model.rotation.set(0, 0, 0);
+      // Rotation is intentionally kept to bake coordinate system fixes into the exported model
       
       // Update matrices to reflect the changes
       model.updateMatrix();
       model.updateMatrixWorld(true);
       
-      console.log('Temporarily reset model transform for export');
+      console.log('Export transform:', {
+        scale: 'reset to 1,1,1',
+        position: 'reset to 0,0,0',
+        rotation: 'kept for baking - ' + JSON.stringify({
+          x: model.rotation.x * (180/Math.PI),
+          y: model.rotation.y * (180/Math.PI),
+          z: model.rotation.z * (180/Math.PI)
+        })
+      });
       
       // Prepare export options
       const exportOptions = {

@@ -55,6 +55,7 @@ export class UIManager {
     document.getElementById('btn-rotate-z-90').addEventListener('click', () => this.sceneManager.rotateModel('z', 90));
     document.getElementById('btn-rotate-z-minus-90').addEventListener('click', () => this.sceneManager.rotateModel('z', -90));
     document.getElementById('btn-reset-rotation').addEventListener('click', () => this.sceneManager.resetModelRotation());
+    document.getElementById('btn-reset-position').addEventListener('click', () => this.sceneManager.resetModelPosition());
     
     // Custom camera preset controls
     document.getElementById('btn-save-camera-view').addEventListener('click', () => this.handleSaveCameraView());

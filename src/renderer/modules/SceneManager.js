@@ -53,6 +53,9 @@ export class SceneManager {
     // Store current model
     this.currentModel = null;
     
+    // Origin gizmo (axes helper)
+    this.originGizmo = null;
+    
     // Camera presets
     this.cameraPresets = {
       perspective: { position: new THREE.Vector3(0, 1.6, 3), target: new THREE.Vector3(0, 1, 0) },
@@ -142,15 +145,26 @@ export class SceneManager {
       this.currentModel = null;
     }
     
+    // Remove origin gizmo
+    if (this.originGizmo) {
+      this.scene.remove(this.originGizmo);
+      this.originGizmo.dispose();
+      this.originGizmo = null;
+    }
+    
     if (this.mixer) {
       this.mixer.stopAllAction();
       this.mixer = null;
     }
   }
   
-  addModel(model) {
+  addModel(model, options = {}) {
     this.clearModel();
     this.currentModel = model;
+    
+    // Store rotation and position if preserve options are set
+    const savedRotation = options.preserveRotation ? model.rotation.clone() : null;
+    const savedPosition = options.preservePosition ? model.position.clone() : null;
     
     // Get bounding box before adding to scene
     const box = new THREE.Box3().setFromObject(model);
@@ -159,6 +173,12 @@ export class SceneManager {
     const maxDim = Math.max(size.x, size.y, size.z);
     
     console.log('Model bounding box:', { size, center, maxDim });
+    if (savedRotation) {
+      console.log('Preserving rotation during addModel:', savedRotation);
+    }
+    if (savedPosition) {
+      console.log('Preserving position during addModel:', savedPosition);
+    }
     
     // Scale model to a standard size for consistent viewing
     // Target size: humanoid characters should be around 1.8 units tall
@@ -178,12 +198,31 @@ export class SceneManager {
     
     this.scene.add(model);
     
-    // Position model so its bottom sits on the grid (y=0)
-    // First center horizontally (X and Z)
-    model.position.x = -center.x;
-    model.position.z = -center.z;
-    // Then position bottom at grid level
-    model.position.y = -box.min.y;
+    // Restore rotation BEFORE positioning if it was preserved
+    if (savedRotation) {
+      model.rotation.copy(savedRotation);
+      console.log('Restored rotation before positioning:', model.rotation);
+      
+      // Recalculate bounding box after rotation
+      box.setFromObject(model);
+      size.copy(box.getSize(new THREE.Vector3()));
+      center.copy(box.getCenter(new THREE.Vector3()));
+      console.log('Recalculated bounds after rotation:', { size, center, min: box.min, max: box.max });
+    }
+    
+    // Only recalculate position if not preserving it
+    if (!savedPosition) {
+      // Position model so its bottom sits on the grid (y=0)
+      // First center horizontally (X and Z)
+      model.position.x = -center.x;
+      model.position.z = -center.z;
+      // Then position bottom at grid level
+      model.position.y = -box.min.y;
+    } else {
+      // Restore saved position
+      model.position.copy(savedPosition);
+      console.log('Restored position:', model.position);
+    }
     
     // Adjust grid size based on model (use post-scaled dimensions)
     const gridSize = Math.max(10, Math.ceil(Math.max(size.x, size.z) * 3));
@@ -193,8 +232,35 @@ export class SceneManager {
       this.scene.add(this.grid);
     }
     
+    // Add origin gizmo to visualize model's pivot point
+    this.updateOriginGizmo();
+    
     // Frame model in camera view
     this.frameModel();
+  }
+  
+  /**
+   * Update or create origin gizmo to show model's pivot point
+   */
+  updateOriginGizmo() {
+    if (!this.currentModel) return;
+    
+    // Remove existing gizmo
+    if (this.originGizmo) {
+      this.scene.remove(this.originGizmo);
+      this.originGizmo.dispose();
+    }
+    
+    // Create axes helper at model's position (shows model's local origin)
+    // Red = X axis, Green = Y axis, Blue = Z axis
+    this.originGizmo = new THREE.AxesHelper(0.5); // 0.5 units size
+    
+    // Position gizmo at model's origin (same position as model)
+    this.originGizmo.position.copy(this.currentModel.position);
+    this.originGizmo.rotation.copy(this.currentModel.rotation);
+    
+    this.scene.add(this.originGizmo);
+    console.log('Origin gizmo added at:', this.currentModel.position);
   }
   
   /**
@@ -325,6 +391,13 @@ export class SceneManager {
     
     const radians = degrees * (Math.PI / 180);
     
+    // Store current position
+    const currentPos = this.currentModel.position.clone();
+    
+    // Reset position to origin for rotation
+    this.currentModel.position.set(0, 0, 0);
+    
+    // Apply rotation around origin
     switch(axis.toLowerCase()) {
       case 'x':
         this.currentModel.rotateX(radians);
@@ -337,15 +410,48 @@ export class SceneManager {
         break;
       default:
         console.warn('Invalid axis:', axis);
+        this.currentModel.position.copy(currentPos);
         return;
     }
     
     console.log(`Rotated model ${degrees}° around ${axis.toUpperCase()} axis`);
-    console.log('Current rotation:', {
-      x: this.currentModel.rotation.x * (180 / Math.PI),
-      y: this.currentModel.rotation.y * (180 / Math.PI),
-      z: this.currentModel.rotation.z * (180 / Math.PI)
-    });
+    
+    // Recalculate bounding box and reposition properly
+    this.currentModel.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(this.currentModel);
+    const center = box.getCenter(new THREE.Vector3());
+    
+    // Center horizontally and ground the model
+    this.currentModel.position.x = -center.x;
+    this.currentModel.position.z = -center.z;
+    this.currentModel.position.y = -box.min.y;
+    
+    // Update origin gizmo
+    this.updateOriginGizmo();
+    
+    console.log('Model repositioned after rotation');
+  }
+  
+  /**
+   * Recalculate model position to center and ground it
+   */
+  repositionModel() {
+    if (!this.currentModel) return;
+    
+    // Force matrix update before calculating bounding box
+    this.currentModel.updateMatrixWorld(true);
+    
+    const box = new THREE.Box3().setFromObject(this.currentModel);
+    const center = box.getCenter(new THREE.Vector3());
+    
+    // Center horizontally (X and Z)
+    this.currentModel.position.x = -center.x;
+    this.currentModel.position.z = -center.z;
+    
+    // Position bottom at grid level (y=0)
+    this.currentModel.position.y = -box.min.y;
+    
+    console.log('Model repositioned - centered and grounded');
   }
   
   /**
@@ -357,7 +463,64 @@ export class SceneManager {
       return;
     }
     
+    // Reset position to origin first
+    this.currentModel.position.set(0, 0, 0);
     this.currentModel.rotation.set(0, 0, 0);
-    console.log('Model rotation reset to zero');
+    
+    // Recalculate proper position
+    this.currentModel.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(this.currentModel);
+    const center = box.getCenter(new THREE.Vector3());
+    
+    this.currentModel.position.x = -center.x;
+    this.currentModel.position.z = -center.z;
+    this.currentModel.position.y = -box.min.y;
+    
+    // Update origin gizmo
+    this.updateOriginGizmo();
+    
+    console.log('Model rotation reset to zero and repositioned');
+  }
+  
+  /**
+   * Update or create origin gizmo to show model's pivot point
+   */
+  updateOriginGizmo() {
+    if (!this.currentModel) return;
+    
+    // Remove existing gizmo
+    if (this.originGizmo) {
+      this.scene.remove(this.originGizmo);
+      this.originGizmo.dispose();
+    }
+    
+    // Create axes helper at model's position (shows model's local origin)
+    // Red = X axis, Green = Y axis, Blue = Z axis
+    this.originGizmo = new THREE.AxesHelper(0.5); // 0.5 units size
+    
+    // Position gizmo at model's origin (same position as model)
+    this.originGizmo.position.copy(this.currentModel.position);
+    this.originGizmo.rotation.copy(this.currentModel.rotation);
+    
+    this.scene.add(this.originGizmo);
+    console.log('Origin gizmo added at:', this.currentModel.position);
+  }
+  
+  /**
+   * Reset model position to centered and grounded
+   */
+  resetModelPosition() {
+    if (!this.currentModel) {
+      console.warn('No model loaded to reset position');
+      return;
+    }
+    
+    // Set model position to 0,0,0
+    this.currentModel.position.set(0, 0, 0);
+    
+    // Update gizmo to match
+    this.updateOriginGizmo();
+    
+    console.log('Model position reset to (0, 0, 0)');
   }
 }
