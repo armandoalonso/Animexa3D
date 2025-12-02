@@ -364,12 +364,6 @@ The application follows a modular architecture with clear separation of concerns
 - ✅ Try re-saving the project
 - ✅ Check console for missing file errors
 
-## 📚 Documentation
-
-- **[Retargeting Algorithm](docs/retargeting-algorithm.md)** - Detailed explanation of the bone mapping and retargeting process
-- **[Retargeting Implementation Plan](docs/retargeting-implementation-plan.md)** - Development roadmap
-- **[Retargeting Integration](docs/retargeting-integration.md)** - Integration guide
-
 ## 🤝 Contributing
 
 Contributions are welcome! Areas for improvement:
@@ -403,3 +397,4 @@ https://github.com/armandoalonso/Animexa3D/issues
 ---
 
 **Made with ❤️ for 3D animation workflows**
+
