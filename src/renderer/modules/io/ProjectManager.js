@@ -1,11 +1,34 @@
 import * as THREE from 'three';
+import { ProjectSerializationService } from './services/ProjectSerializationService.js';
+import { ProjectStateService } from './services/ProjectStateService.js';
+import { ProjectAssetService } from './services/ProjectAssetService.js';
+import { ProjectIOService } from './services/ProjectIOService.js';
+import { ProjectUIAdapter } from './adapters/ProjectUIAdapter.js';
 
+/**
+ * ProjectManager - Thin orchestrator
+ * Coordinates between services and adapters
+ * Minimal business logic - delegates to specialized services
+ */
 export class ProjectManager {
   constructor(sceneManager, modelLoader, animationManager, textureManager) {
+    // Manager dependencies
     this.sceneManager = sceneManager;
     this.modelLoader = modelLoader;
     this.animationManager = animationManager;
     this.textureManager = textureManager;
+
+    // Services (pure logic)
+    this.serializationService = ProjectSerializationService;
+    this.stateService = ProjectStateService;
+    this.assetService = ProjectAssetService;
+
+    // I/O Service (injected dependency)
+    this.ioService = new ProjectIOService(window.electronAPI);
+
+    // UI Adapter
+    this.uiAdapter = new ProjectUIAdapter();
+    this.uiAdapter.initialize();
   }
 
   /**
@@ -14,130 +37,43 @@ export class ProjectManager {
    */
   async saveProject() {
     try {
-      const currentModel = this.modelLoader.getCurrentModelData();
-      
-      if (!currentModel) {
-        throw new Error('No model loaded to save');
-      }
-      
-      const currentModelObject = this.sceneManager.getModel();
-      console.log('Saving model rotation:', currentModelObject?.rotation);
+      // 1. Capture current state using StateService
+      const state = this.stateService.captureCurrentState({
+        sceneManager: this.sceneManager,
+        modelLoader: this.modelLoader,
+        animationManager: this.animationManager,
+        textureManager: this.textureManager
+      });
 
-      // Gather all project data
-      const projectData = {
-        version: '1.0.0',
-        timestamp: new Date().toISOString(),
-        
-        // Model information
-        model: {
-          name: currentModel.name,
-          path: currentModel.path || null,
-          extension: currentModel.name.split('.').pop().toLowerCase(),
-          bufferData: currentModel.bufferData ? Array.from(new Uint8Array(currentModel.bufferData)) : null,
-          position: {
-            x: this.sceneManager.getModel()?.position.x || 0,
-            y: this.sceneManager.getModel()?.position.y || 0,
-            z: this.sceneManager.getModel()?.position.z || 0
-          },
-          rotation: {
-            x: this.sceneManager.getModel()?.rotation.x || 0,
-            y: this.sceneManager.getModel()?.rotation.y || 0,
-            z: this.sceneManager.getModel()?.rotation.z || 0
-          }
-        },
-        
-        // Animations (including added animations)
-        animations: this.animationManager.getAnimations().map(clip => {
-          console.log('Saving animation:', clip.name);
-          return {
-            name: clip.name,
-            duration: clip.duration,
-            tracks: clip.tracks.map(track => ({
-              name: track.name,
-              times: Array.from(track.times),
-              values: Array.from(track.values),
-              type: track.constructor.name // VectorKeyframeTrack, QuaternionKeyframeTrack, etc.
-            }))
-          };
-        }),
-        
-        // Textures and materials
-        materials: this.textureManager.getMaterials().map(material => ({
-          uuid: material.uuid,
-          name: material.name,
-          textures: Object.entries(material.textures).map(([key, textureData]) => ({
-            key: key,
-            label: textureData.label,
-            source: textureData.source,
-            path: textureData.extractedPath || textureData.source
-          }))
-        })),
-        
-        // Scene settings
-        scene: {
-          backgroundColor: '#' + this.sceneManager.scene.background.getHexString(),
-          gridVisible: this.sceneManager.gridVisible,
-          
-          // Camera
-          camera: {
-            position: {
-              x: this.sceneManager.camera.position.x,
-              y: this.sceneManager.camera.position.y,
-              z: this.sceneManager.camera.position.z
-            },
-            target: {
-              x: this.sceneManager.controls.target.x,
-              y: this.sceneManager.controls.target.y,
-              z: this.sceneManager.controls.target.z
-            }
-          },
-          
-          // Lighting
-          lighting: {
-            ambientIntensity: this.sceneManager.ambientLight.intensity,
-            directionalIntensity: this.sceneManager.directionalLight.intensity,
-            directionalPosition: {
-              x: this.sceneManager.directionalLight.position.x,
-              y: this.sceneManager.directionalLight.position.y,
-              z: this.sceneManager.directionalLight.position.z
-            }
-          }
-        }
-      };
+      // 2. Serialize project data using SerializationService
+      const projectData = this.serializationService.serializeProject(
+        state.model,
+        state.animations,
+        state.materials,
+        state.scene
+      );
 
-      // Show save dialog
-      const savePath = await window.electronAPI.saveProjectDialog();
+      // 3. Collect texture files using AssetService
+      const textureFiles = this.assetService.collectTextureFiles(state.materials);
+
+      // 4. Show save dialog via IOService
+      const savePath = await this.ioService.showSaveDialog();
       
       if (!savePath) {
         return false; // User cancelled
       }
 
-      // Collect texture file paths
-      const textureFiles = [];
-      for (const material of this.textureManager.getMaterials()) {
-        for (const [key, textureData] of Object.entries(material.textures)) {
-          const texturePath = textureData.extractedPath || textureData.source;
-          if (texturePath && typeof texturePath === 'string' && texturePath !== 'Embedded Texture') {
-            textureFiles.push({
-              sourcePath: texturePath,
-              materialUuid: material.uuid,
-              textureKey: key
-            });
-          }
-        }
-      }
+      // 5. Save project via IOService
+      await this.ioService.saveProjectToFile(savePath, projectData, textureFiles);
 
-      // Send to main process for zipping
-      const result = await window.electronAPI.saveProject(savePath, projectData, textureFiles);
+      // 6. Update UI via UIAdapter
+      this.uiAdapter.showSaveSuccess(savePath);
       
-      if (result.success) {
-        return true;
-      } else {
-        throw new Error(result.error || 'Failed to save project');
-      }
+      return true;
       
     } catch (error) {
       console.error('Error saving project:', error);
+      this.uiAdapter.showSaveError(error);
       throw error;
     }
   }
@@ -147,77 +83,84 @@ export class ProjectManager {
    * @returns {Promise<boolean>} Success status
    */
   async loadProject(projectPath = null) {
-    const loadingOverlay = document.getElementById('loading-overlay');
-    const emptyState = document.getElementById('empty-state');
-    
     try {
-      // Show open dialog if no path provided
+      // 1. Show open dialog if no path provided
       if (!projectPath) {
-        projectPath = await window.electronAPI.openProjectDialog();
+        projectPath = await this.ioService.showOpenDialog();
         
         if (!projectPath) {
           return false; // User cancelled
         }
       }
 
-      // Show loading overlay and hide empty state
-      loadingOverlay.classList.add('active');
-      emptyState.classList.add('hidden');
+      // 2. Show loading UI
+      this.uiAdapter.showLoadingOverlay();
+      this.uiAdapter.hideEmptyState();
 
-      // Load and unzip project data from main process
-      const result = await window.electronAPI.loadProject(projectPath);
+      // 3. Load and unzip project data via IOService
+      const { projectData, extractedPath } = await this.ioService.loadProjectFromFile(projectPath);
       
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to load project');
-      }
+      // 4. Validate project data
+      this.serializationService.validateProjectData(projectData);
 
-      const projectData = result.data;
-      const extractedPath = result.extractedPath;
-      
-      console.log('Loading project - model data:', projectData.model);
+      // 5. Deserialize project data
+      const deserializedData = this.serializationService.deserializeProject(projectData);
 
-      // 1. Load the model
-      await this._loadProjectModel(projectData, extractedPath);
+      // 6. Load the model
+      const loadedModelData = await this._loadProjectModel(deserializedData, extractedPath);
 
-      // 2. Load animations
-      await this._loadProjectAnimations(projectData);
+      // 7. Restore state using StateService
+      await this.stateService.restoreState(
+        {
+          model: {
+            data: deserializedData.model,
+            loadedModelData: loadedModelData
+          },
+          animations: deserializedData.animations,
+          materials: deserializedData.materials,
+          scene: deserializedData.scene
+        },
+        {
+          sceneManager: this.sceneManager,
+          modelLoader: this.modelLoader,
+          animationManager: this.animationManager,
+          textureManager: this.textureManager
+        }
+      );
 
-      // 3. Load textures
-      await this._loadProjectTextures(projectData, extractedPath);
+      // 8. Restore materials/textures with extracted path
+      await this._loadProjectTextures(deserializedData, extractedPath);
 
-      // 4. Restore scene settings
-      await this._loadProjectSceneSettings(projectData);
+      // 9. Update UI controls
+      this.uiAdapter.updateSceneControls(deserializedData.scene);
 
-      // Hide loading overlay
-      loadingOverlay.classList.remove('active');
+      // 10. Hide loading and enable UI
+      this.uiAdapter.hideLoadingOverlay();
+      this.uiAdapter.enableProjectButtons();
+      this.uiAdapter.showLoadSuccess();
 
-      // Enable buttons after successful load
-      document.getElementById('btn-retarget').disabled = false;
-      document.getElementById('btn-add-animation').disabled = false;
-      document.getElementById('btn-save-project').disabled = false;
-      document.getElementById('btn-export-model').disabled = false;
-
-      this.showNotification('Project loaded successfully', 'success');
       return true;
 
     } catch (error) {
       console.error('Error loading project:', error);
-      loadingOverlay.classList.remove('active');
-      this.showNotification('Failed to load project: ' + error.message, 'error');
+      this.uiAdapter.hideLoadingOverlay();
+      this.uiAdapter.showLoadError(error);
       return false;
     }
   }
   
+  /**
+   * Load project model (helper method)
+   * @private
+   */
   async _loadProjectModel(projectData, extractedPath) {
     if (!projectData.model || !projectData.model.fileName) {
       throw new Error('No model data in project');
     }
     
     const modelPath = `${extractedPath}/${projectData.model.fileName}`;
-    const modelBuffer = await window.electronAPI.readFileAsBuffer(modelPath);
+    const modelBuffer = await this.ioService.readFileAsBuffer(modelPath);
     const extension = projectData.model.extension;
-    
-    console.log('Loading model with extension:', extension);
     
     // Load model data but don't add to scene yet
     let modelData;
@@ -233,103 +176,13 @@ export class ProjectManager {
     modelData.name = projectData.model.fileName;
     modelData.bufferData = modelBuffer;
     
-    console.log('Checking for saved rotation:', {
-      hasRotation: !!projectData.model.rotation,
-      rotation: projectData.model.rotation,
-      hasPosition: !!projectData.model.position,
-      position: projectData.model.position
-    });
-    
-    // Apply saved rotation BEFORE adding to scene
-    if (projectData.model.rotation) {
-      console.log('Applying saved rotation before adding to scene:', projectData.model.rotation);
-      modelData.model.rotation.set(
-        projectData.model.rotation.x || 0,
-        projectData.model.rotation.y || 0,
-        projectData.model.rotation.z || 0
-      );
-    } else {
-      console.log('No rotation data found in project');
-    }
-    
-    // Apply saved position BEFORE adding to scene
-    if (projectData.model.position) {
-      console.log('Applying saved position before adding to scene:', projectData.model.position);
-      modelData.model.position.set(
-        projectData.model.position.x || 0,
-        projectData.model.position.y || 0,
-        projectData.model.position.z || 0
-      );
-    }
-    
-    // Now add model to scene (with rotation and position already applied and preserved)
-    this.sceneManager.addModel(modelData.model, { preserveRotation: true, preservePosition: true });
-    
-    // Create animation mixer if animations exist
-    if (modelData.animations && modelData.animations.length > 0) {
-      this.sceneManager.createMixer(modelData.model);
-    }
-    
-    // Update UI
-    const polyCount = this.modelLoader.countPolygons(modelData.model);
-    const boneCount = this.modelLoader.countBones(modelData.model);
-    this.modelLoader.updateModelInfo(projectData.model.fileName, polyCount, modelData.animations.length, boneCount);
-    
-    // Store as current model data
-    this.modelLoader.currentModelData = modelData;
+    return modelData;
   }
   
-  async _loadProjectAnimations(projectData) {
-    if (projectData.animations && projectData.animations.length > 0) {
-      console.log('Loading animations from project data:', projectData.animations.map(a => a.name));
-      
-      // Restore animations from saved project data (including added/renamed animations)
-      const restoredAnimations = projectData.animations.map(savedClip => {
-        const tracks = savedClip.tracks.map(savedTrack => {
-          const times = new Float32Array(savedTrack.times);
-          const values = new Float32Array(savedTrack.values);
-          
-          // Reconstruct the appropriate track type
-          let TrackConstructor;
-          switch (savedTrack.type) {
-            case 'VectorKeyframeTrack':
-              TrackConstructor = THREE.VectorKeyframeTrack;
-              break;
-            case 'QuaternionKeyframeTrack':
-              TrackConstructor = THREE.QuaternionKeyframeTrack;
-              break;
-            case 'NumberKeyframeTrack':
-              TrackConstructor = THREE.NumberKeyframeTrack;
-              break;
-            case 'ColorKeyframeTrack':
-              TrackConstructor = THREE.ColorKeyframeTrack;
-              break;
-            case 'BooleanKeyframeTrack':
-              TrackConstructor = THREE.BooleanKeyframeTrack;
-              break;
-            case 'StringKeyframeTrack':
-              TrackConstructor = THREE.StringKeyframeTrack;
-              break;
-            default:
-              TrackConstructor = THREE.KeyframeTrack;
-          }
-          
-          return new TrackConstructor(savedTrack.name, times, values);
-        });
-        
-        const clip = new THREE.AnimationClip(savedClip.name, savedClip.duration, tracks);
-        console.log('Restored animation clip:', clip.name);
-        return clip;
-      });
-      
-      console.log('Calling loadAnimations with:', restoredAnimations.map(a => a.name));
-      // Load the restored animations
-      this.animationManager.loadAnimations(restoredAnimations);
-    } else {
-      this.animationManager.loadAnimations([]);
-    }
-  }
-  
+  /**
+   * Load project textures (helper method)
+   * @private
+   */
   async _loadProjectTextures(projectData, extractedPath) {
     if (projectData.materials && projectData.materials.length > 0) {
       // Extract materials from loaded model
@@ -363,78 +216,23 @@ export class ProjectManager {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
-  
-  async _loadProjectSceneSettings(projectData) {
-    if (!projectData.scene) return;
-    
-    // Background color
-    if (projectData.scene.backgroundColor) {
-      this.sceneManager.setBackgroundColor(projectData.scene.backgroundColor);
-      document.getElementById('bg-color').value = projectData.scene.backgroundColor;
-    }
-    
-    // Grid visibility
-    if (typeof projectData.scene.gridVisible !== 'undefined') {
-      this.sceneManager.toggleGrid(projectData.scene.gridVisible);
-      document.getElementById('grid-toggle').checked = projectData.scene.gridVisible;
-    }
-    
-    // Camera
-    if (projectData.scene.camera) {
-      const cam = projectData.scene.camera;
-      this.sceneManager.camera.position.set(cam.position.x, cam.position.y, cam.position.z);
-      this.sceneManager.controls.target.set(cam.target.x, cam.target.y, cam.target.z);
-      this.sceneManager.controls.update();
-    }
-    
-    // Lighting
-    if (projectData.scene.lighting) {
-      const lighting = projectData.scene.lighting;
-      
-      // Ambient light
-      this.sceneManager.updateAmbientLightIntensity(lighting.ambientIntensity);
-      document.getElementById('amb-light-intensity').value = lighting.ambientIntensity;
-      document.getElementById('amb-light-value').textContent = lighting.ambientIntensity;
-      
-      // Directional light
-      this.sceneManager.updateDirectionalLightIntensity(lighting.directionalIntensity);
-      document.getElementById('dir-light-intensity').value = lighting.directionalIntensity;
-      document.getElementById('dir-light-value').textContent = lighting.directionalIntensity;
-      
-      // Directional light position
-      const pos = lighting.directionalPosition;
-      this.sceneManager.updateLightPosition(pos.x, pos.y, pos.z);
-      document.getElementById('light-x').value = pos.x;
-      document.getElementById('light-y').value = pos.y;
-      document.getElementById('light-z').value = pos.z;
-      document.getElementById('light-x-value').textContent = pos.x;
-      document.getElementById('light-y-value').textContent = pos.y;
-      document.getElementById('light-z-value').textContent = pos.z;
-    }
-  }
-
-  showNotification(message, type) {
-    if (window.uiManager) {
-      window.uiManager.showNotification(message, type);
-    }
-  }
 
   /**
    * Get current project state for quick save
-   * @returns {Object} Project state
+   * @returns {Object} Project state summary
    */
   getProjectState() {
-    const currentModel = this.modelLoader.getCurrentModelData();
-    
-    if (!currentModel) {
+    try {
+      const state = this.stateService.captureCurrentState({
+        sceneManager: this.sceneManager,
+        modelLoader: this.modelLoader,
+        animationManager: this.animationManager,
+        textureManager: this.textureManager
+      });
+
+      return this.stateService.getProjectMetadata(state);
+    } catch (error) {
       return null;
     }
-
-    return {
-      hasModel: true,
-      modelName: currentModel.name,
-      animationCount: this.animationManager.getAnimations().length,
-      materialCount: this.textureManager.getMaterials().length
-    };
   }
 }
