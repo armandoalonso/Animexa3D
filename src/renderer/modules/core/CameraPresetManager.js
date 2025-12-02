@@ -1,14 +1,16 @@
 import * as THREE from 'three';
+import { StorageService } from './StorageService.js';
 
 /**
  * CameraPresetManager - Handles saving, loading, and managing camera view presets
- * Persists presets across sessions using localStorage
+ * Persists presets across sessions using StorageService (injectable for testing)
  */
 export class CameraPresetManager {
-  constructor(sceneManager) {
+  constructor(sceneManager, storageService = null) {
     this.sceneManager = sceneManager;
-    this.presets = this.loadPresetsFromStorage();
+    this.storageService = storageService || new StorageService();
     this.STORAGE_KEY = 'camera_presets';
+    this.presets = this.loadPresetsFromStorage();
   }
 
   /**
@@ -141,28 +143,18 @@ export class CameraPresetManager {
   }
 
   /**
-   * Save presets to localStorage
+   * Save presets to storage
    */
   savePresetsToStorage() {
-    try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.presets));
-    } catch (error) {
-      console.error('Failed to save camera presets to localStorage:', error);
-    }
+    return this.storageService.save(this.STORAGE_KEY, this.presets);
   }
 
   /**
-   * Load presets from localStorage
+   * Load presets from storage
    * @returns {Object} Loaded presets or empty object
    */
   loadPresetsFromStorage() {
-    try {
-      const stored = localStorage.getItem(this.STORAGE_KEY);
-      return stored ? JSON.parse(stored) : {};
-    } catch (error) {
-      console.error('Failed to load camera presets from localStorage:', error);
-      return {};
-    }
+    return this.storageService.load(this.STORAGE_KEY, {});
   }
 
   /**

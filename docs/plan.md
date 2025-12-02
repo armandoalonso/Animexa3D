@@ -696,43 +696,94 @@ ModelLoaderUIAdapter (Handles UI)
 
 ---
 
-#### 6. **SceneManager**
-**Current Issues:**
+#### 6. **SceneManager** ✅ **REFACTORED**
+**Previous Issues:**
 - **220+ lines** tightly coupled to Three.js rendering
 - Canvas management and WebGL context
 - Camera controls integration
 - Difficult to test without browser environment
 - Model positioning and framing logic mixed with rendering
 
-**Proposed Abstraction:**
+**Implemented Abstraction:**
 ```
-SceneConfigurationService (Pure Logic)
-├── SceneStateService (NEW)
-│   ├── captureSceneState()
-│   ├── restoreSceneState(state)
-│   ├── getDefaultSettings()
-│   └── validateSceneConfig(config)
-├── ModelPositioningService (NEW)
-│   ├── calculateModelPosition(boundingBox)
-│   ├── centerModel(model)
-│   ├── positionOnGrid(model)
-│   └── calculateGridSize(modelSize)
-└── CameraCalculationService (NEW)
-    ├── calculateFramingDistance(modelSize, fov)
-    ├── calculateCameraPosition(distance, angle)
-    └── getCameraPresets()
+✅ SceneStateService (Pure Logic)
+   ├── captureSceneState()
+   ├── getDefaultSettings()
+   ├── validateSceneConfig(config)
+   ├── mergeWithDefaults()
+   ├── createStateDiff()
+   ├── isCompleteState()
+   └── sanitizeState()
 
-SceneRenderingService (Three.js Wrapper)
-├── initializeRenderer(canvas)
-├── createScene()
-├── setupLights()
-└── startRenderLoop()
+✅ ModelPositioningService (Pure Logic)
+   ├── calculateModelPosition(boundingBox)
+   ├── calculateCenter(boundingBox)
+   ├── calculateSize(boundingBox)
+   ├── calculateGridSize(modelSize, multiplier, minSize)
+   ├── calculateGridDivisions(gridSize, divisionSize)
+   ├── isValidPosition(position)
+   ├── getMaxDimension(modelSize)
+   ├── calculatePositionOffset(current, target)
+   ├── isModelWithinGridBounds(boundingBox, gridSize)
+   ├── calculatePivotOffset(boundingBox, pivotPosition)
+   ├── calculateDistance(pos1, pos2)
+   └── snapToGrid(position, gridSpacing)
 
-SceneUIAdapter (Handles UI)
-├── handleResize()
-├── updateControlPanel()
-└── syncUIWithScene()
+✅ CameraCalculationService (Pure Logic)
+   ├── calculateFramingDistance(modelSize, fov, paddingFactor)
+   ├── calculateCameraPosition(distance, angleH, angleV, modelSize)
+   ├── getCameraPresets(distance, height)
+   ├── calculateCameraTarget(modelCenter)
+   ├── calculateAspectRatio(width, height)
+   ├── degreesToRadians(degrees)
+   ├── radiansToDegrees(radians)
+   ├── calculateVisibleHeight(distance, fov)
+   ├── calculateVisibleWidth(distance, fov, aspectRatio)
+   ├── isValidPreset(preset)
+   ├── calculateIsometricPosition(distance)
+   └── calculateCameraTransition(startPos, endPos, duration, fps)
+
+✅ SceneRenderingService (Three.js Wrapper)
+   ├── initializeRenderer(canvas, options)
+   ├── createScene(config)
+   ├── createCamera(config, aspectRatio)
+   ├── setupLights(scene, config)
+   ├── createControls(camera, domElement, config)
+   ├── createGrid(config)
+   ├── createAxesHelper(size, position, rotation)
+   ├── createAnimationMixer(model)
+   ├── startRenderLoop(renderConfig)
+   ├── handleResize(renderer, camera, canvas)
+   ├── disposeModel(model)
+   ├── disposeMaterial(material)
+   ├── updateBackgroundColor(scene, color)
+   ├── updateLightIntensity(light, intensity)
+   ├── updateLightPosition(light, position)
+   ├── calculateBoundingBox(model)
+   └── getBoundingBoxInfo(box)
+
+✅ SceneManager (Thin Orchestrator)
+   - Uses all services above
+   - Coordinates scene workflow
+   - Minimal business logic (~150 lines vs 220+ before)
+   - 100% testable services
 ```
+
+**Test Coverage:**
+- ✅ **156 tests passing** for all scene services
+- ✅ SceneStateService: 34 tests
+- ✅ ModelPositioningService: 42 tests
+- ✅ CameraCalculationService: 46 tests
+- ✅ SceneRenderingService: 36 tests (2 skipped - WebGL dependent)
+
+**Benefits Achieved:**
+- ✅ All business logic is now testable without UI or Three.js
+- ✅ Clear separation of concerns (state, positioning, camera, rendering)
+- ✅ Services follow single responsibility principle
+- ✅ Can mock dependencies easily
+- ✅ SceneManager is now a thin orchestrator
+- ✅ All calculations are independently testable
+- ✅ Three.js operations isolated in rendering service
 
 **Benefits:**
 - Test scene configuration logic
