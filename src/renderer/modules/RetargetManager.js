@@ -53,6 +53,14 @@ export class RetargetManager {
     this.coordinateCorrectionRotation = new THREE.Quaternion().setFromEuler(
       new THREE.Euler(0, -Math.PI / 2, 0) // -90 degrees around Y axis
     );
+    
+    // Retargeting options
+    this.retargetOptions = {
+      useWorldSpaceTransformation: false, // New advanced mode
+      autoValidatePose: true,
+      autoApplyTPose: false,
+      useOptimalScale: true
+    };
   }
   
   /**
@@ -1087,11 +1095,57 @@ export class RetargetManager {
     console.log('  Quaternions precomputed');
     
     // Compute proportion ratio for position scaling
-    this.proportionRatio = this.computeProportionRatio();
+    if (this.retargetOptions.useOptimalScale) {
+      this.proportionRatio = this.computeOptimalScale();
+      console.log('Using optimal scale computation');
+    } else {
+      this.proportionRatio = this.computeProportionRatio();
+      console.log('Using basic proportion ratio');
+    }
+    
+    // Validate poses if enabled
+    if (this.retargetOptions.autoValidatePose) {
+      const poseValidation = this.validateRetargetingPoses();
+      console.log('Pose validation:', poseValidation);
+      
+      // Show validation results to user
+      if (window.uiManager) {
+        const poseMessage = `🧍 Pose Detection: Source is ${poseValidation.sourcePose}, Target is ${poseValidation.targetPose}`;
+        const poseType = poseValidation.valid ? 'info' : 'warning';
+        window.uiManager.showNotification(poseMessage, poseType, 5000);
+        
+        if (!poseValidation.valid || poseValidation.recommendation.includes('may improve')) {
+          window.uiManager.showNotification(`💡 ${poseValidation.recommendation}`, 'info', 6000);
+        }
+      }
+      
+      if (!poseValidation.valid && this.retargetOptions.autoApplyTPose) {
+        console.log('⚠ Incompatible poses detected, applying T-pose normalization');
+        try {
+          const srcBoneMap = this.detectTPoseBones(this.srcBindPose);
+          const trgBoneMap = this.detectTPoseBones(this.trgBindPose);
+          
+          this.applyTPose(this.srcBindPose, srcBoneMap);
+          this.applyTPose(this.trgBindPose, trgBoneMap);
+          
+          console.log('✓ T-pose normalization applied');
+          
+          if (window.uiManager) {
+            window.uiManager.showNotification('✓ Auto-applied T-pose normalization', 'success', 4000);
+          }
+        } catch (error) {
+          console.error('Failed to apply T-pose normalization:', error);
+          if (window.uiManager) {
+            window.uiManager.showNotification('⚠ T-pose normalization failed', 'warning', 4000);
+          }
+        }
+      }
+    }
     
     console.log('Retargeting initialized successfully:', {
       proportionRatio: this.proportionRatio.toFixed(3),
-      mappedBones: mappedCount
+      mappedBones: mappedCount,
+      worldSpaceMode: this.retargetOptions.useWorldSpaceTransformation
     });
   }
   
@@ -1241,7 +1295,16 @@ export class RetargetManager {
         quat.copy(correctedQuat);
       }
       
-      this.retargetQuaternion(boneIndex, quat, quat);
+      // Use world-space transformation if enabled, otherwise use precomputed method
+      if (this.retargetOptions.useWorldSpaceTransformation) {
+        const retargetedQuat = this.retargetKeyframeWorldSpace(boneIndex, quat, 'rotation');
+        if (retargetedQuat) {
+          quat.copy(retargetedQuat);
+        }
+      } else {
+        this.retargetQuaternion(boneIndex, quat, quat);
+      }
+      
       trgValues[i] = quat.x;
       trgValues[i + 1] = quat.y;
       trgValues[i + 2] = quat.z;
@@ -2116,5 +2179,284 @@ export class RetargetManager {
       mappingCount: Object.keys(this.boneMapping).length,
       confidence: this.mappingConfidence
     };
+  }
+  
+  /**
+   * Set retargeting options
+   * @param {Object} options - Retargeting options
+   */
+  setRetargetOptions(options) {
+    this.retargetOptions = {
+      ...this.retargetOptions,
+      ...options
+    };
+    console.log('Retargeting options updated:', this.retargetOptions);
+  }
+  
+  /**
+   * Validate retargeting poses and return analysis
+   * @returns {Object} - Pose validation results
+   */
+  validateRetargetingPoses() {
+    if (!this.srcBindPose || !this.trgBindPose) {
+      return {
+        valid: false,
+        message: 'Bind poses not initialized',
+        sourceInTPose: false,
+        targetInTPose: false
+      };
+    }
+    
+    const srcPose = this.detectPoseType(this.srcBindPose);
+    const trgPose = this.detectPoseType(this.trgBindPose);
+    
+    const compatible = (srcPose === trgPose) || 
+                       (srcPose === 'T-pose' && trgPose === 'A-pose') ||
+                       (srcPose === 'A-pose' && trgPose === 'T-pose');
+    
+    let recommendation = '';
+    if (!compatible) {
+      recommendation = `Source is ${srcPose} and target is ${trgPose}. Consider applying T-pose normalization.`;
+    } else if (srcPose !== 'T-pose' && trgPose !== 'T-pose') {
+      recommendation = 'Poses are compatible but T-pose normalization may improve results.';
+    } else {
+      recommendation = 'Poses are compatible for retargeting.';
+    }
+    
+    return {
+      valid: compatible,
+      sourceInTPose: srcPose === 'T-pose',
+      targetInTPose: trgPose === 'T-pose',
+      sourcePose: srcPose,
+      targetPose: trgPose,
+      recommendation: recommendation
+    };
+  }
+  
+  /**
+   * Detect pose type from skeleton
+   * @param {THREE.Skeleton} skeleton - Skeleton to analyze
+   * @returns {string} - Pose type: 'T-pose', 'A-pose', 'other', 'unknown'
+   */
+  detectPoseType(skeleton) {
+    try {
+      // Find arm bones
+      const leftArmBone = skeleton.bones.find(b => 
+        /left.*arm|arm.*l|upperarm.*l|l.*upperarm/i.test(b.name) && !/hand|finger/i.test(b.name)
+      );
+      const rightArmBone = skeleton.bones.find(b => 
+        /right.*arm|arm.*r|upperarm.*r|r.*upperarm/i.test(b.name) && !/hand|finger/i.test(b.name)
+      );
+      
+      if (!leftArmBone || !rightArmBone) {
+        console.log('Could not find arm bones for pose detection');
+        return 'unknown';
+      }
+      
+      // Get first child (forearm) to measure direction
+      const leftChild = leftArmBone.children.find(c => c.isBone);
+      const rightChild = rightArmBone.children.find(c => c.isBone);
+      
+      if (!leftChild || !rightChild) {
+        console.log('Could not find forearm bones for pose detection');
+        return 'unknown';
+      }
+      
+      // Calculate arm directions in world space
+      const leftDir = new THREE.Vector3();
+      const rightDir = new THREE.Vector3();
+      
+      leftDir.subVectors(
+        leftChild.getWorldPosition(new THREE.Vector3()),
+        leftArmBone.getWorldPosition(new THREE.Vector3())
+      ).normalize();
+      
+      rightDir.subVectors(
+        rightChild.getWorldPosition(new THREE.Vector3()),
+        rightArmBone.getWorldPosition(new THREE.Vector3())
+      ).normalize();
+      
+      // Measure angle from horizontal
+      const horizontalAxis = new THREE.Vector3(1, 0, 0);
+      const leftAngle = Math.abs(leftDir.angleTo(horizontalAxis)) * 180 / Math.PI;
+      const rightAngle = Math.abs(rightDir.angleTo(horizontalAxis.negate())) * 180 / Math.PI;
+      
+      // Also check vertical component
+      const leftVertical = Math.abs(leftDir.y);
+      const rightVertical = Math.abs(rightDir.y);
+      
+      console.log('Pose detection:', {
+        leftAngle: leftAngle.toFixed(1),
+        rightAngle: rightAngle.toFixed(1),
+        leftVertical: leftVertical.toFixed(2),
+        rightVertical: rightVertical.toFixed(2)
+      });
+      
+      // T-pose: arms horizontal (0-25 degrees from horizontal, low vertical component)
+      if (leftAngle < 25 && rightAngle < 25 && leftVertical < 0.3 && rightVertical < 0.3) {
+        return 'T-pose';
+      }
+      
+      // A-pose: arms at ~30-60 degrees down from horizontal
+      if (leftAngle > 25 && leftAngle < 75 && leftVertical > 0.3) {
+        return 'A-pose';
+      }
+      
+      return 'other';
+    } catch (error) {
+      console.error('Error detecting pose type:', error);
+      return 'unknown';
+    }
+  }
+  
+  /**
+   * Compute optimal scale ratio between source and target skeletons
+   * Uses multiple bone measurements and returns median to avoid outliers
+   * @returns {number} - Optimal scale ratio
+   */
+  computeOptimalScale() {
+    if (!this.srcBindPose || !this.trgBindPose) {
+      console.warn('Cannot compute optimal scale: bind poses not initialized');
+      return 1.0;
+    }
+    
+    const measurements = [];
+    
+    // Define bone pairs to measure
+    const bonePairs = [
+      ['Hips', 'Spine'],
+      ['Spine', 'Neck'],
+      ['LeftArm', 'LeftForeArm'],
+      ['LeftForeArm', 'LeftHand'],
+      ['RightArm', 'RightForeArm'],
+      ['RightForeArm', 'RightHand'],
+      ['LeftUpLeg', 'LeftLeg'],
+      ['LeftLeg', 'LeftFoot'],
+      ['RightUpLeg', 'RightLeg'],
+      ['RightLeg', 'RightFoot']
+    ];
+    
+    for (const [startPattern, endPattern] of bonePairs) {
+      // Find bones by pattern matching
+      const srcStart = this.srcBindPose.bones.find(b => 
+        new RegExp(startPattern, 'i').test(b.name)
+      );
+      const srcEnd = this.srcBindPose.bones.find(b => 
+        new RegExp(endPattern, 'i').test(b.name)
+      );
+      const trgStart = this.trgBindPose.bones.find(b => 
+        new RegExp(startPattern, 'i').test(b.name)
+      );
+      const trgEnd = this.trgBindPose.bones.find(b => 
+        new RegExp(endPattern, 'i').test(b.name)
+      );
+      
+      if (srcStart && srcEnd && trgStart && trgEnd) {
+        const srcLength = srcStart.getWorldPosition(new THREE.Vector3())
+          .distanceTo(srcEnd.getWorldPosition(new THREE.Vector3()));
+        const trgLength = trgStart.getWorldPosition(new THREE.Vector3())
+          .distanceTo(trgEnd.getWorldPosition(new THREE.Vector3()));
+        
+        if (srcLength > 0.001) {
+          const ratio = trgLength / srcLength;
+          measurements.push(ratio);
+          console.log(`Scale measurement ${startPattern}-${endPattern}: ${ratio.toFixed(3)}`);
+        }
+      }
+    }
+    
+    if (measurements.length === 0) {
+      console.warn('No valid measurements for scale computation, using default');
+      return 1.0;
+    }
+    
+    // Return median to avoid outliers
+    measurements.sort((a, b) => a - b);
+    const mid = Math.floor(measurements.length / 2);
+    const median = measurements.length % 2 === 0
+      ? (measurements[mid - 1] + measurements[mid]) / 2
+      : measurements[mid];
+    
+    console.log(`Optimal scale computed: ${median.toFixed(3)} (from ${measurements.length} measurements)`);
+    console.log(`Scale range: ${measurements[0].toFixed(3)} to ${measurements[measurements.length - 1].toFixed(3)}`);
+    
+    return median;
+  }
+  
+  /**
+   * Retarget keyframe using world-space transformation approach
+   * @param {number} srcBoneIndex - Source bone index
+   * @param {*} keyframeData - Keyframe data (Vector3 or Quaternion)
+   * @param {string} dataType - 'scale', 'rotation', or 'translation'
+   * @returns {*} - Retargeted keyframe data
+   */
+  retargetKeyframeWorldSpace(srcBoneIndex, keyframeData, dataType) {
+    const trgIndex = this.boneMapIndices.idxMap[srcBoneIndex];
+    if (trgIndex < 0) return null;
+    
+    // Get T-pose transforms
+    const srcBone = this.srcBindPose.bones[srcBoneIndex];
+    const trgBone = this.trgBindPose.bones[trgIndex];
+    
+    // Get bind matrices
+    const srcBindWorldMatrix = srcBone.matrixWorld.clone();
+    const trgBindWorldMatrix = trgBone.matrixWorld.clone();
+    const inverseBindMatrix = srcBindWorldMatrix.clone().invert();
+    
+    // Get target parent's inverse (for converting back to local space)
+    const inverseParentMatrix = new THREE.Matrix4();
+    if (trgBone.parent && trgBone.parent.isBone) {
+      const parentIdx = this.trgBindPose.parentIndices[trgIndex];
+      if (parentIdx >= 0) {
+        inverseParentMatrix.copy(
+          this.trgBindPose.bones[parentIdx].matrixWorld
+        ).invert();
+      }
+    }
+    
+    // Create transform matrix from keyframe data
+    const animMatrix = new THREE.Matrix4();
+    const srcLocalMatrix = new THREE.Matrix4();
+    srcLocalMatrix.compose(srcBone.position, srcBone.quaternion, srcBone.scale);
+    
+    switch(dataType) {
+      case 'scale':
+        const tempScale = new THREE.Matrix4().makeScale(
+          keyframeData.x, keyframeData.y, keyframeData.z
+        );
+        animMatrix.multiplyMatrices(srcLocalMatrix, tempScale);
+        break;
+      case 'rotation':
+        const tempRot = new THREE.Matrix4().makeRotationFromQuaternion(keyframeData);
+        animMatrix.multiplyMatrices(srcLocalMatrix, tempRot);
+        break;
+      case 'translation':
+        const tempTrans = new THREE.Matrix4().makeTranslation(
+          keyframeData.x, keyframeData.y, keyframeData.z
+        );
+        animMatrix.multiplyMatrices(srcLocalMatrix, tempTrans);
+        break;
+    }
+    
+    // Apply world-space transformation:
+    // localMatrix = inverseBindMatrix * animMatrix
+    let localMatrix = animMatrix.clone().premultiply(inverseBindMatrix);
+    
+    // Apply to target: targetMatrix * localMatrix * inverseParentMatrix
+    localMatrix.premultiply(trgBindWorldMatrix).multiply(inverseParentMatrix);
+    
+    // Decompose back to S/R/T
+    const position = new THREE.Vector3();
+    const quaternion = new THREE.Quaternion();
+    const scale = new THREE.Vector3();
+    localMatrix.decompose(position, quaternion, scale);
+    
+    switch(dataType) {
+      case 'scale': return scale;
+      case 'rotation': return quaternion;
+      case 'translation': return position;
+    }
+    
+    return null;
   }
 }

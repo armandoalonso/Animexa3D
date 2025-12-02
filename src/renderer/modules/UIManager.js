@@ -103,12 +103,6 @@ export class UIManager {
     // Add Animation modal
     document.getElementById('btn-load-animation-file').addEventListener('click', () => this.handleLoadAnimationFile());
     document.getElementById('btn-add-selected-animations').addEventListener('click', () => this.handleAddSelectedAnimations());
-    document.getElementById('btn-auto-map-inline').addEventListener('click', () => this.handleInlineAutoMap());
-    document.getElementById('btn-clear-mapping-inline').addEventListener('click', () => this.handleInlineClearMapping());
-    document.getElementById('btn-toggle-bone-trees').addEventListener('click', () => this.handleToggleBoneTrees());
-    document.getElementById('btn-create-mapping-inline').addEventListener('click', () => this.handleInlineCreateMapping());
-    document.getElementById('inline-target-root-bone-select').addEventListener('change', (e) => this.handleInlineTargetRootBoneChange(e));
-    document.getElementById('inline-source-root-bone-select').addEventListener('change', (e) => this.handleInlineSourceRootBoneChange(e));
     
     // Modal close buttons
     document.querySelectorAll('.modal .delete').forEach(btn => {
@@ -1045,10 +1039,22 @@ export class UIManager {
     // Read retargeting options from UI
     const sourcePoseMode = parseInt(document.getElementById('source-pose-mode').value);
     const targetPoseMode = parseInt(document.getElementById('target-pose-mode').value);
-    const poseNormalization = document.querySelector('input[name="pose-normalization"]:checked')?.value || 'none';
     const embedTransforms = document.getElementById('embed-transforms').checked;
     const preserveRootMotion = document.getElementById('preserve-root-motion').checked;
-    const applyUE5RotationFix = document.getElementById('ue5-rotation-fix').checked;
+    
+    // Read advanced options
+    const useWorldSpaceTransform = document.getElementById('use-world-space-transform').checked;
+    const autoValidatePose = document.getElementById('auto-validate-pose').checked;
+    const autoApplyTPose = document.getElementById('auto-apply-tpose').checked;
+    const useOptimalScale = document.getElementById('use-optimal-scale').checked;
+    
+    // Set retargeting options
+    this.retargetManager.setRetargetOptions({
+      useWorldSpaceTransformation: useWorldSpaceTransform,
+      autoValidatePose: autoValidatePose,
+      autoApplyTPose: autoApplyTPose,
+      useOptimalScale: useOptimalScale
+    });
     
     console.log('Retargeting with options:', {
       sourceAnimationCount: sourceModelData.animations.length,
@@ -1056,10 +1062,12 @@ export class UIManager {
       boneMapping: Object.keys(this.retargetManager.boneMapping).length + ' bones mapped',
       sourcePoseMode,
       targetPoseMode,
-      poseNormalization,
       embedTransforms,
       preserveRootMotion,
-      applyUE5RotationFix
+      useWorldSpaceTransform,
+      autoValidatePose,
+      autoApplyTPose,
+      useOptimalScale
     });
     
     // If preserving root motion, ensure root bones are mapped
@@ -1081,70 +1089,21 @@ export class UIManager {
       }
     }
     
-    // Set UE5 rotation correction flag
-    this.retargetManager.applyCoordinateCorrection = applyUE5RotationFix;
-    
-    // Apply pose normalization BEFORE initializing if requested
-    if (poseNormalization !== 'none') {
-      console.log(`Applying ${poseNormalization.toUpperCase()} normalization to bind poses...`);
-      try {
-        const sourceSkeleton = this.retargetManager.getSourceSkeleton();
-        const targetSkeleton = this.retargetManager.getTargetSkeleton();
-        
-        if (sourceSkeleton) {
-          if (poseNormalization === 'tpose') {
-            this.retargetManager.applyTPose(sourceSkeleton);
-            console.log('✓ Source skeleton normalized to T-pose');
-          } else if (poseNormalization === 'apose') {
-            this.retargetManager.applyAPose(sourceSkeleton);
-            console.log('✓ Source skeleton normalized to A-pose');
-          }
-        } else {
-          console.warn('Could not get source skeleton for pose normalization');
-        }
-        
-        if (targetSkeleton) {
-          if (poseNormalization === 'tpose') {
-            this.retargetManager.applyTPose(targetSkeleton);
-            console.log('✓ Target skeleton normalized to T-pose');
-          } else if (poseNormalization === 'apose') {
-            this.retargetManager.applyAPose(targetSkeleton);
-            console.log('✓ Target skeleton normalized to A-pose');
-          }
-        } else {
-          console.warn('Could not get target skeleton for pose normalization');
-        }
-      } catch (poseError) {
-        console.error('Pose normalization error:', poseError);
-        this.showNotification(
-          `Warning: ${poseNormalization.toUpperCase()} normalization failed, proceeding without it`,
-          'warning'
-        );
-      }
-    }
-    
     // Initialize retargeting with options
-    // If pose normalization was applied, use CURRENT mode to capture the normalized skeleton
     try {
-      const usePoseNormalization = poseNormalization !== 'none';
       const options = {
-        srcPoseMode: usePoseNormalization ? 1 : sourcePoseMode, // 1 = CURRENT if normalized
-        trgPoseMode: usePoseNormalization ? 1 : targetPoseMode, // 1 = CURRENT if normalized
+        srcPoseMode: sourcePoseMode,
+        trgPoseMode: targetPoseMode,
         srcEmbedWorld: embedTransforms,
         trgEmbedWorld: embedTransforms
       };
       
       console.log('Initializing with pose modes:', {
-        source: usePoseNormalization ? `CURRENT (${poseNormalization.toUpperCase()})` : (sourcePoseMode === 0 ? 'DEFAULT' : 'CURRENT'),
-        target: usePoseNormalization ? `CURRENT (${poseNormalization.toUpperCase()})` : (targetPoseMode === 0 ? 'DEFAULT' : 'CURRENT')
+        source: sourcePoseMode === 0 ? 'DEFAULT' : 'CURRENT',
+        target: targetPoseMode === 0 ? 'DEFAULT' : 'CURRENT'
       });
       
-      this.retargetManager.initializeRetargeting(
-        sourceModelData.skeleton,
-        this.modelLoader.getCurrentModelData().skeleton,
-        this.retargetManager.boneMapping,
-        options
-      );
+      this.retargetManager.initializeRetargeting(options);
     } catch (error) {
       console.error('Retargeting initialization error:', error);
       this.showNotification('Failed to initialize retargeting: ' + error.message, 'error');
@@ -1205,16 +1164,8 @@ export class UIManager {
     // Reset modal state
     document.getElementById('animation-file-info').style.display = 'none';
     document.getElementById('animation-selection-container').style.display = 'none';
-    document.getElementById('retargeting-section').style.display = 'none';
-    document.getElementById('inline-bone-trees').style.display = 'none';
     document.getElementById('btn-add-selected-animations').disabled = true;
     this.loadedAnimationData = null;
-    this.inlineRetargetingActive = false;
-    this.inlineBoneMapping = {};
-    this.inlineSelectedCurrentBone = null;
-    this.inlineSelectedAnimBone = null;
-    this.inlineSelectedTargetRootBone = null;
-    this.inlineSelectedSourceRootBone = null;
     
     // Setup drag-drop handlers for animation files
     const dropZone = document.getElementById('animation-drop-zone');
@@ -1345,9 +1296,10 @@ export class UIManager {
       // Display verification result
       this.displayBoneVerification(verification);
       
-      // If compatible or at least partially compatible, show animation selection
-      if (verification.compatible || verification.matchPercentage >= 50) {
+      // Only show animation selection if confidence is >= 90%
+      if (verification.matchPercentage >= 90) {
         this.displayAnimationSelection(animationData.animations);
+        document.getElementById('btn-add-selected-animations').disabled = false;
       } else {
         document.getElementById('animation-selection-container').style.display = 'none';
         document.getElementById('btn-add-selected-animations').disabled = true;
@@ -1361,15 +1313,14 @@ export class UIManager {
   
   displayBoneVerification(verification) {
     const container = document.getElementById('bone-verification-result');
-    const retargetingSection = document.getElementById('retargeting-section');
     
     let statusClass = '';
     let statusIcon = '';
     
-    if (verification.matchPercentage === 100) {
+    if (verification.matchPercentage >= 90) {
       statusClass = 'has-text-success';
       statusIcon = '✓';
-    } else if (verification.compatible) {
+    } else if (verification.matchPercentage >= 70) {
       statusClass = 'has-text-warning';
       statusIcon = '⚠';
     } else {
@@ -1384,6 +1335,16 @@ export class UIManager {
         <p>Model Bones: ${verification.sourceBoneCount} | Animation File Bones: ${verification.targetBoneCount}</p>
       </div>
     `;
+    
+    // Show guidance if match is too low
+    if (verification.matchPercentage < 90) {
+      html += `
+        <div class="notification is-warning is-light">
+          <p><strong>⚠ Bone structure confidence is below 90%</strong></p>
+          <p class="help">This animation file has a different bone structure than your model. Please use the <strong>Retarget Animation</strong> menu from the main toolbar to properly retarget this animation.</p>
+        </div>
+      `;
+    }
     
     if (verification.missingBones.length > 0) {
       html += `
@@ -1408,15 +1369,6 @@ export class UIManager {
     }
     
     container.innerHTML = html;
-    
-    // Show retargeting section if compatibility is poor (< 80%)
-    if (verification.matchPercentage < 80) {
-      retargetingSection.style.display = 'block';
-      this.inlineRetargetingActive = true;
-    } else {
-      retargetingSection.style.display = 'none';
-      this.inlineRetargetingActive = false;
-    }
   }
   
   displayAnimationSelection(animations) {
@@ -1495,409 +1447,9 @@ export class UIManager {
     this.updateAddAnimationButton();
   }
   
-  // Inline Retargeting Handlers (for Add Animation Modal)
-  
-  handleInlineAutoMap() {
-    if (!this.loadedAnimationData) {
-      this.showNotification('No animation file loaded', 'error');
-      return;
-    }
-    
-    const currentModel = this.modelLoader.getCurrentModelData();
-    const includeHandBones = document.getElementById('auto-map-include-hands-inline').checked;
-    
-    // Generate automatic mapping: current model -> animation file
-    const result = this.retargetManager.generateAutomaticMapping(
-      currentModel.skeletons.boneNames,
-      this.loadedAnimationData.boneNames,
-      includeHandBones
-    );
-    
-    this.inlineBoneMapping = result.mapping;
-    const mappedCount = Object.keys(this.inlineBoneMapping).length;
-    const confidencePercent = Math.round(result.confidence * 100);
-    
-    // Log detailed mapping
-    console.log('🔗 Inline Bone Mapping (current→anim):');
-    console.log(`  Mapped: ${mappedCount} bones`);
-    console.log('  Mappings:');
-    for (const [src, trg] of Object.entries(this.inlineBoneMapping)) {
-      console.log(`    ${src} → ${trg}`);
-    }
-    
-    // Update UI
-    document.getElementById('inline-mapped-count').textContent = mappedCount;
-    document.getElementById('inline-mapping-confidence').textContent = confidencePercent + '%';
-    document.getElementById('inline-mapping-info').style.display = 'block';
-    document.getElementById('btn-clear-mapping-inline').disabled = false;
-    
-    this.showNotification(
-      `Auto-mapped ${mappedCount} bones with ${confidencePercent}% confidence`,
-      confidencePercent > 70 ? 'success' : 'warning'
-    );
-    
-    // Populate root bone dropdowns
-    this.populateInlineRootBoneDropdowns();
-    
-    // Update mappings display if tree is visible
-    if (document.getElementById('inline-bone-trees').style.display === 'block') {
-      this.updateInlineMappingDisplay();
-    }
-    
-    // Show animation selection now that we have mapping
-    if (this.loadedAnimationData.animations && this.loadedAnimationData.animations.length > 0) {
-      this.displayAnimationSelection(this.loadedAnimationData.animations);
-    }
-    
-    // Enable add button if animations are selected
-    this.updateAddAnimationButton();
-  }
-  
-  handleInlineClearMapping() {
-    this.inlineBoneMapping = {};
-    document.getElementById('inline-mapped-count').textContent = '0';
-    document.getElementById('inline-mapping-confidence').textContent = '0%';
-    document.getElementById('inline-mapping-info').style.display = 'none';
-    document.getElementById('btn-clear-mapping-inline').disabled = true;
-    
-    this.updateInlineMappingDisplay();
-    this.showNotification('Mappings cleared', 'info');
-  }
-  
-  /**
-   * Handle inline target root bone selection change
-   */
-  handleInlineTargetRootBoneChange(event) {
-    const boneName = event.target.value;
-    
-    if (boneName) {
-      this.inlineSelectedTargetRootBone = boneName;
-      this.showNotification(`Your model root bone set to: ${boneName}`, 'info', 3000);
-    } else {
-      this.inlineSelectedTargetRootBone = null;
-      this.showNotification('Using auto-detected root bone for your model', 'info', 3000);
-    }
-  }
-  
-  /**
-   * Handle inline source root bone selection change
-   */
-  handleInlineSourceRootBoneChange(event) {
-    const boneName = event.target.value;
-    
-    if (boneName) {
-      this.inlineSelectedSourceRootBone = boneName;
-      this.showNotification(`Animation file root bone set to: ${boneName}`, 'info', 3000);
-    } else {
-      this.inlineSelectedSourceRootBone = null;
-      this.showNotification('Using auto-detected root bone for animation file', 'info', 3000);
-    }
-  }
-  
-  handleToggleBoneTrees() {
-    const treeContainer = document.getElementById('inline-bone-trees');
-    const button = document.getElementById('btn-toggle-bone-trees');
-    
-    if (treeContainer.style.display === 'none') {
-      // Show trees
-      treeContainer.style.display = 'block';
-      button.querySelector('span:last-child').textContent = 'Hide Bone Trees';
-      
-      // Build bone trees
-      this.buildInlineBoneTrees();
-    } else {
-      // Hide trees
-      treeContainer.style.display = 'none';
-      button.querySelector('span:last-child').textContent = 'Show Bone Trees';
-    }
-  }
-  
-  buildInlineBoneTrees() {
-    const currentModel = this.modelLoader.getCurrentModelData();
-    
-    // Build current model tree using actual skeleton hierarchy
-    const currentTreeHtml = this.buildBoneTreeFromSkeleton(currentModel, 'current');
-    document.getElementById('inline-current-model-tree').innerHTML = currentTreeHtml;
-    
-    // Build animation file tree using actual skeleton hierarchy
-    const animTreeHtml = this.buildBoneTreeFromSkeleton(this.loadedAnimationData, 'anim');
-    document.getElementById('inline-animation-file-tree').innerHTML = animTreeHtml;
-    
-    // Add click handlers
-    this.addInlineBoneClickHandlers();
-    
-    // Update mapping display
-    this.updateInlineMappingDisplay();
-  }
-  
-  buildBoneTreeFromSkeleton(modelData, side) {
-    if (!modelData || !modelData.skeletons || !modelData.skeletons.bones || modelData.skeletons.bones.length === 0) {
-      return '<p class="has-text-grey is-size-7">No bones</p>';
-    }
-    
-    const bones = modelData.skeletons.bones;
-    
-    // Find root bones (bones with no parent or parent is not in the bone list)
-    const boneSet = new Set(bones);
-    const rootBones = bones.filter(bone => {
-      return !bone.parent || !boneSet.has(bone.parent) || !bone.parent.isBone;
-    });
-    
-    let html = '<div class="bone-tree-hierarchical">';
-    rootBones.forEach((rootBone, index) => {
-      html += this.renderBoneNodeFromObject(rootBone, side, 0, index, boneSet);
-    });
-    html += '</div>';
-    
-    return html;
-  }
-  
-  renderBoneNodeFromObject(boneObject, side, depth, index, boneSet) {
-    const indent = depth * 4;
-    const boneName = boneObject.name;
-    
-    const isMapped = side === 'current' ?
-      Object.keys(this.inlineBoneMapping).includes(boneName) :
-      Object.values(this.inlineBoneMapping).includes(boneName);
-    
-    const mappedClass = isMapped ? 'bone-mapped' : '';
-    
-    // Get children that are bones
-    const childBones = boneObject.children.filter(child => 
-      (child.isBone || child.type === 'Bone') && boneSet.has(child)
-    );
-    
-    const hasChildren = childBones.length > 0;
-    const nodeId = `bone-${side}-${depth}-${index}-${boneName.replace(/[^a-zA-Z0-9]/g, '_')}`;
-    
-    let html = `
-      <div class="bone-node" style="padding-left: ${indent}px;">
-        <div class="bone-item-inline ${mappedClass}" data-bone="${boneName}" data-side="${side}">
-          ${hasChildren ? `<span class="bone-toggle" data-target="${nodeId}">\u25bc</span>` : '<span class="bone-spacer"></span>'}
-          <span class="bone-name">${boneName}</span>
-        </div>`;
-    
-    if (hasChildren) {
-      html += `<div class="bone-children" id="${nodeId}">`;
-      childBones.forEach((childBone, childIndex) => {
-        html += this.renderBoneNodeFromObject(childBone, side, depth + 1, childIndex, boneSet);
-      });
-      html += '</div>';
-    }
-    
-    html += '</div>';
-    
-    return html;
-  }
-  
-  /**
-   * Populate inline root bone dropdowns
-   */
-  populateInlineRootBoneDropdowns() {
-    if (!this.loadedAnimationData || !this.modelLoader.getCurrentModelData()) {
-      return;
-    }
-    
-    const currentModel = this.modelLoader.getCurrentModelData();
-    const animData = this.loadedAnimationData;
-    
-    // Populate target (your model) root bone dropdown
-    const targetSelect = document.getElementById('inline-target-root-bone-select');
-    targetSelect.innerHTML = '<option value="">Auto-detect...</option>';
-    
-    if (currentModel.skeletons && currentModel.skeletons.boneNames) {
-      currentModel.skeletons.boneNames.forEach(boneName => {
-        const option = document.createElement('option');
-        option.value = boneName;
-        option.textContent = boneName;
-        targetSelect.appendChild(option);
-      });
-    }
-    
-    // Populate source (animation file) root bone dropdown
-    const sourceSelect = document.getElementById('inline-source-root-bone-select');
-    sourceSelect.innerHTML = '<option value="">Auto-detect...</option>';
-    
-    if (animData.boneNames) {
-      animData.boneNames.forEach(boneName => {
-        const option = document.createElement('option');
-        option.value = boneName;
-        option.textContent = boneName;
-        sourceSelect.appendChild(option);
-      });
-    }
-  }
-  
-  addInlineBoneClickHandlers() {
-    // Current model bones
-    document.querySelectorAll('[data-side="current"]').forEach(item => {
-      item.addEventListener('click', (e) => {
-        // Don't trigger if clicking the toggle
-        if (e.target.classList.contains('bone-toggle')) return;
-        
-        // Clear previous selection on both sides
-        document.querySelectorAll('[data-side="current"]').forEach(b => b.classList.remove('selected'));
-        document.querySelectorAll('[data-side="anim"]').forEach(b => b.classList.remove('selected'));
-        
-        item.classList.add('selected');
-        
-        const boneName = item.getAttribute('data-bone');
-        this.inlineSelectedCurrentBone = boneName;
-        document.getElementById('inline-selected-current-bone').value = boneName;
-        
-        // If this bone is mapped, highlight the corresponding bone on the other side
-        if (this.inlineBoneMapping[boneName]) {
-          const mappedBoneName = this.inlineBoneMapping[boneName];
-          const mappedBone = document.querySelector(`[data-side="anim"][data-bone="${mappedBoneName}"]`);
-          if (mappedBone) {
-            mappedBone.classList.add('selected');
-            // Scroll into view if needed
-            mappedBone.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }
-        }
-        
-        this.updateInlineCreateMappingButton();
-      });
-    });
-    
-    // Animation file bones
-    document.querySelectorAll('[data-side="anim"]').forEach(item => {
-      item.addEventListener('click', (e) => {
-        // Don't trigger if clicking the toggle
-        if (e.target.classList.contains('bone-toggle')) return;
-        
-        // Clear previous selection on both sides
-        document.querySelectorAll('[data-side="current"]').forEach(b => b.classList.remove('selected'));
-        document.querySelectorAll('[data-side="anim"]').forEach(b => b.classList.remove('selected'));
-        
-        item.classList.add('selected');
-        
-        const boneName = item.getAttribute('data-bone');
-        this.inlineSelectedAnimBone = boneName;
-        document.getElementById('inline-selected-anim-bone').value = boneName;
-        
-        // If this bone is mapped (find reverse mapping), highlight the corresponding bone on the other side
-        const mappedCurrentBone = Object.keys(this.inlineBoneMapping).find(
-          key => this.inlineBoneMapping[key] === boneName
-        );
-        if (mappedCurrentBone) {
-          const mappedBone = document.querySelector(`[data-side="current"][data-bone="${mappedCurrentBone}"]`);
-          if (mappedBone) {
-            mappedBone.classList.add('selected');
-            // Scroll into view if needed
-            mappedBone.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }
-        }
-        
-        this.updateInlineCreateMappingButton();
-      });
-    });
-    
-    // Toggle handlers for collapsible sections
-    document.querySelectorAll('.bone-toggle').forEach(toggle => {
-      toggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const targetId = toggle.getAttribute('data-target');
-        const childrenContainer = document.getElementById(targetId);
-        
-        if (childrenContainer) {
-          const isCollapsed = childrenContainer.classList.toggle('collapsed');
-          toggle.textContent = isCollapsed ? '▶' : '▼';
-        }
-      });
-    });
-  }
-  
-  updateInlineCreateMappingButton() {
-    const btn = document.getElementById('btn-create-mapping-inline');
-    btn.disabled = !(this.inlineSelectedCurrentBone && this.inlineSelectedAnimBone);
-  }
-  
-  handleInlineCreateMapping() {
-    if (!this.inlineSelectedCurrentBone || !this.inlineSelectedAnimBone) {
-      this.showNotification('Please select both bones', 'warning');
-      return;
-    }
-    
-    this.inlineBoneMapping[this.inlineSelectedCurrentBone] = this.inlineSelectedAnimBone;
-    
-    // Update UI
-    const mappedCount = Object.keys(this.inlineBoneMapping).length;
-    document.getElementById('inline-mapped-count').textContent = mappedCount;
-    document.getElementById('inline-mapping-info').style.display = 'block';
-    document.getElementById('btn-clear-mapping-inline').disabled = false;
-    
-    this.showNotification(
-      `Mapped: ${this.inlineSelectedCurrentBone} → ${this.inlineSelectedAnimBone}`,
-      'success'
-    );
-    
-    // Clear selection
-    this.inlineSelectedCurrentBone = null;
-    this.inlineSelectedAnimBone = null;
-    document.getElementById('inline-selected-current-bone').value = '';
-    document.getElementById('inline-selected-anim-bone').value = '';
-    document.getElementById('btn-create-mapping-inline').disabled = true;
-    
-    // Rebuild trees to show new mapping
-    this.buildInlineBoneTrees();
-    
-    // Show animation selection if we now have mappings and animations
-    if (this.loadedAnimationData && this.loadedAnimationData.animations && this.loadedAnimationData.animations.length > 0) {
-      this.displayAnimationSelection(this.loadedAnimationData.animations);
-    }
-    
-    this.updateAddAnimationButton();
-  }
-  
-  updateInlineMappingDisplay() {
-    const container = document.getElementById('inline-mapping-list');
-    
-    if (Object.keys(this.inlineBoneMapping).length === 0) {
-      container.innerHTML = '<p class="has-text-grey is-size-7">No mappings yet</p>';
-      return;
-    }
-    
-    let html = '';
-    Object.entries(this.inlineBoneMapping).forEach(([source, target]) => {
-      html += `
-        <div class="mapping-item-inline">
-          <span class="is-size-7">${source} → ${target}</span>
-          <button class="button is-danger is-small" data-source="${source}" style="margin-left: auto;">✕</button>
-        </div>
-      `;
-    });
-    
-    container.innerHTML = html;
-    
-    // Add remove handlers
-    container.querySelectorAll('button').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const source = btn.getAttribute('data-source');
-        delete this.inlineBoneMapping[source];
-        
-        const mappedCount = Object.keys(this.inlineBoneMapping).length;
-        document.getElementById('inline-mapped-count').textContent = mappedCount;
-        
-        if (mappedCount === 0) {
-          document.getElementById('inline-mapping-info').style.display = 'none';
-          document.getElementById('btn-clear-mapping-inline').disabled = true;
-        }
-        
-        this.updateInlineMappingDisplay();
-        if (document.getElementById('inline-bone-trees').style.display === 'block') {
-          this.buildInlineBoneTrees();
-        }
-        
-        this.showNotification(`Removed mapping for ${source}`, 'info');
-      });
-    });
-  }
-  
   updateAddAnimationButton() {
     const checkboxes = document.querySelectorAll('.animation-checkbox:checked');
-    const hasMappingIfNeeded = !this.inlineRetargetingActive || Object.keys(this.inlineBoneMapping).length > 0;
-    document.getElementById('btn-add-selected-animations').disabled = checkboxes.length === 0 || !hasMappingIfNeeded;
+    document.getElementById('btn-add-selected-animations').disabled = checkboxes.length === 0;
   }
   
   async handleAddSelectedAnimations() {
@@ -1941,195 +1493,7 @@ export class UIManager {
       return anim;
     });
     
-    // If retargeting is active and we have mappings, use robust retargeting
-    if (this.inlineRetargetingActive && Object.keys(this.inlineBoneMapping).length > 0) {
-      const currentModel = this.modelLoader.getCurrentModelData();
-      
-      // Read retargeting options from UI (same as main window)
-      const sourcePoseMode = parseInt(document.getElementById('inline-source-pose-mode').value);
-      const targetPoseMode = parseInt(document.getElementById('inline-target-pose-mode').value);
-      const poseNormalization = document.querySelector('input[name="pose-normalization-inline"]:checked')?.value || 'none';
-      const embedTransforms = document.getElementById('inline-embed-transforms').checked;
-      const preserveRootMotion = document.getElementById('preserve-hip-position-inline').checked;
-      const applyUE5RotationFix = document.getElementById('ue5-rotation-fix-inline').checked;
-      
-      console.log('=== ROBUST RETARGETING ANIMATION (MODAL) ===');
-      console.log('Bone mapping (current->anim):', this.inlineBoneMapping);
-      console.log('Animation bones:', this.loadedAnimationData.boneNames);
-      console.log('Current model bones:', currentModel.skeletons.boneNames);
-      console.log('Options:', {
-        sourcePoseMode,
-        targetPoseMode,
-        poseNormalization,
-        embedTransforms,
-        preserveRootMotion,
-        applyUE5RotationFix
-      });
-      
-      // Invert the bone mapping for retargeting
-      // inlineBoneMapping is: currentModelBone -> animBone
-      // We need: animBone -> currentModelBone
-      const invertedMapping = {};
-      Object.entries(this.inlineBoneMapping).forEach(([currentBone, animBone]) => {
-        invertedMapping[animBone] = currentBone;
-      });
-      
-      console.log('Inverted mapping (anim->current):', invertedMapping);
-      
-      // Log detailed mapping for debugging
-      console.log('🔗 Bone Mapping Details:');
-      console.log(`  Mapped: ${Object.keys(invertedMapping).length} bones`);
-      console.log('  Mappings:');
-      for (const [src, trg] of Object.entries(invertedMapping)) {
-        console.log(`    ${src} → ${trg}`);
-      }
-      
-      // Apply user-selected root bones if specified
-      if (this.inlineSelectedSourceRootBone) {
-        this.retargetManager.setSourceRootBone(this.inlineSelectedSourceRootBone);
-        console.log('Using user-selected source root bone:', this.inlineSelectedSourceRootBone);
-      }
-      if (this.inlineSelectedTargetRootBone) {
-        this.retargetManager.setTargetRootBone(this.inlineSelectedTargetRootBone);
-        console.log('Using user-selected target root bone:', this.inlineSelectedTargetRootBone);
-      }
-      
-      // If preserving root motion, ensure root bones are mapped
-      if (preserveRootMotion) {
-        const effectiveSourceRoot = this.retargetManager.getEffectiveSourceRootBone();
-        const effectiveTargetRoot = this.retargetManager.getEffectiveTargetRootBone();
-        
-        if (effectiveSourceRoot && effectiveTargetRoot) {
-          if (!invertedMapping[effectiveSourceRoot]) {
-            invertedMapping[effectiveSourceRoot] = effectiveTargetRoot;
-            console.log(`🎯 Added root bone mapping for root motion: ${effectiveSourceRoot} → ${effectiveTargetRoot}`);
-            this.showNotification(`Added root bone mapping: ${effectiveSourceRoot} → ${effectiveTargetRoot}`, 'info', 4000);
-          } else {
-            console.log(`✓ Root bone already mapped: ${effectiveSourceRoot} → ${invertedMapping[effectiveSourceRoot]}`);
-          }
-        } else {
-          console.warn('⚠️ Root motion enabled but root bones not identified');
-          this.showNotification('Warning: Root bones not identified. Root motion may not work correctly.', 'warning', 5000);
-        }
-      }
-      
-      try {
-        // Setup retargeting using the robust RetargetManager
-        // Set animation data as source (can be animation file structure)
-        this.retargetManager.setSourceModel(this.loadedAnimationData);
-        this.retargetManager.setTargetModel(currentModel);
-        
-        // Apply bone mapping
-        this.retargetManager.boneMapping = invertedMapping;
-        
-        // Set UE5 rotation correction flag
-        this.retargetManager.applyCoordinateCorrection = applyUE5RotationFix;
-        
-        // Apply pose normalization BEFORE initializing if requested
-        if (poseNormalization !== 'none') {
-          console.log(`Applying ${poseNormalization.toUpperCase()} normalization to bind poses...`);
-          try {
-            const sourceSkeleton = this.retargetManager.getSourceSkeleton();
-            const targetSkeleton = this.retargetManager.getTargetSkeleton();
-            
-            if (sourceSkeleton) {
-              if (poseNormalization === 'tpose') {
-                this.retargetManager.applyTPose(sourceSkeleton);
-                console.log('✓ Source skeleton normalized to T-pose');
-              } else if (poseNormalization === 'apose') {
-                this.retargetManager.applyAPose(sourceSkeleton);
-                console.log('✓ Source skeleton normalized to A-pose');
-              }
-            } else {
-              console.warn('Could not get source skeleton for pose normalization');
-            }
-            
-            if (targetSkeleton) {
-              if (poseNormalization === 'tpose') {
-                this.retargetManager.applyTPose(targetSkeleton);
-                console.log('✓ Target skeleton normalized to T-pose');
-              } else if (poseNormalization === 'apose') {
-                this.retargetManager.applyAPose(targetSkeleton);
-                console.log('✓ Target skeleton normalized to A-pose');
-              }
-            } else {
-              console.warn('Could not get target skeleton for pose normalization');
-            }
-          } catch (poseError) {
-            console.error('Pose normalization error:', poseError);
-            this.showNotification(
-              `Warning: ${poseNormalization.toUpperCase()} normalization failed, proceeding without it`,
-              'warning'
-            );
-          }
-        }
-        
-        // Initialize retargeting with options (same as main window)
-        // If pose normalization was applied, use CURRENT mode to capture the normalized skeleton
-        const usePoseNormalization = poseNormalization !== 'none';
-        const options = {
-          srcPoseMode: usePoseNormalization ? 1 : sourcePoseMode, // 1 = CURRENT if normalized
-          trgPoseMode: usePoseNormalization ? 1 : targetPoseMode, // 1 = CURRENT if normalized
-          srcEmbedWorld: embedTransforms,
-          trgEmbedWorld: embedTransforms
-        };
-        
-        console.log('Initializing with pose modes:', {
-          source: usePoseNormalization ? `CURRENT (${poseNormalization.toUpperCase()})` : (sourcePoseMode === 0 ? 'DEFAULT' : 'CURRENT'),
-          target: usePoseNormalization ? `CURRENT (${poseNormalization.toUpperCase()})` : (targetPoseMode === 0 ? 'DEFAULT' : 'CURRENT')
-        });
-        
-        this.retargetManager.initializeRetargeting(options);
-        
-        // Retarget each animation
-        const retargetedAnimations = [];
-        for (const animation of selectedAnimations) {
-          try {
-            console.log(`\nRetargeting: ${animation.name}`);
-            console.log(`  Original tracks: ${animation.tracks.length}`);
-            
-            // Use robust retargeting algorithm
-            const retargetedClip = this.retargetManager.retargetAnimation(animation, preserveRootMotion);
-            
-            if (retargetedClip) {
-              console.log(`  ✓ Retargeted tracks: ${retargetedClip.tracks.length}`);
-              retargetedAnimations.push(retargetedClip);
-            } else {
-              console.warn(`  ✗ Failed to retarget ${animation.name}`);
-            }
-          } catch (error) {
-            console.error(`  ✗ Error retargeting ${animation.name}:`, error);
-          }
-        }
-        
-        console.log(`\n=== RETARGETING COMPLETE: ${retargetedAnimations.length}/${selectedAnimations.length} successful ===\n`);
-        
-        if (retargetedAnimations.length > 0) {
-          selectedAnimations = retargetedAnimations;
-          
-          const mappingInfo = this.retargetManager.getMappingInfo();
-          const message = `Retargeted ${retargetedAnimations.length} animation(s) using robust algorithm (${mappingInfo.mappingCount} bones mapped, ${(mappingInfo.confidence * 100).toFixed(0)}% confidence)`;
-          
-          this.showNotification(message, 'success', 8000);
-          
-          // Show proportions info
-          this.showNotification(
-            `📐 Scale ratio: ${this.retargetManager.proportionRatio.toFixed(3)}x - Positions automatically adjusted`,
-            'info',
-            6000
-          );
-        } else {
-          this.showNotification('Failed to retarget animations. Check the console for details.', 'error');
-          return;
-        }
-      } catch (error) {
-        console.error('Retargeting setup error:', error);
-        this.showNotification(`Retargeting failed: ${error.message}`, 'error');
-        return;
-      }
-    }
-    
-    // Add animations to the animation manager
+    // Directly add animations (no retargeting - bones must match >= 90%)
     const totalAnimations = this.animationManager.addAnimations(selectedAnimations);
     
     this.showNotification(
@@ -2140,7 +1504,7 @@ export class UIManager {
     // Close modal
     document.getElementById('add-animation-modal').classList.remove('is-active');
   }
-
+  
   /**
    * Display materials and textures in the texture panel
    */
