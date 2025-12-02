@@ -1,147 +1,160 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { SceneStateService } from './SceneStateService.js';
+import { ModelPositioningService } from './ModelPositioningService.js';
+import { CameraCalculationService } from './CameraCalculationService.js';
+import { SceneRenderingService } from './SceneRenderingService.js';
 
+/**
+ * SceneManager - Thin orchestrator for 3D scene management
+ * Uses service classes for all business logic
+ */
 export class SceneManager {
   constructor() {
+    // Get canvas element
     this.canvas = document.getElementById('webgl-canvas');
-    this.scene = new THREE.Scene();
-    this.clock = new THREE.Clock();
-    this.mixer = null;
     
-    // Setup renderer
-    this.renderer = new THREE.WebGLRenderer({
-      canvas: this.canvas,
-      antialias: true,
-      preserveDrawingBuffer: true,
-      alpha: true
+    // Get default settings from service
+    const defaults = SceneStateService.getDefaultSettings();
+    
+    // Initialize Three.js components using services
+    this.renderer = SceneRenderingService.initializeRenderer(this.canvas);
+    
+    this.scene = SceneRenderingService.createScene({
+      backgroundColor: defaults.backgroundColor
     });
-    this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
     
-    // Setup camera
-    this.camera = new THREE.PerspectiveCamera(
-      45,
-      this.canvas.clientWidth / this.canvas.clientHeight,
-      0.1,
-      1000
+    const aspectRatio = CameraCalculationService.calculateAspectRatio(
+      this.canvas.clientWidth,
+      this.canvas.clientHeight
     );
-    this.camera.position.set(0, 1.6, 3);
     
-    // Setup controls
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.05;
-    this.controls.target.set(0, 1, 0);
-    this.controls.update();
+    this.camera = SceneRenderingService.createCamera({
+      fov: defaults.cameraFov,
+      near: defaults.cameraNear,
+      far: defaults.cameraFar,
+      position: defaults.cameraPosition
+    }, aspectRatio);
     
-    // Set background color
-    this.scene.background = new THREE.Color(0x2c3e50);
+    this.controls = SceneRenderingService.createControls(
+      this.camera,
+      this.renderer.domElement,
+      {
+        enableDamping: defaults.controlsDamping,
+        dampingFactor: defaults.controlsDampingFactor,
+        target: defaults.cameraTarget
+      }
+    );
     
-    // Setup lighting
-    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-    this.scene.add(this.ambientLight);
+    // Setup lighting using service
+    const lights = SceneRenderingService.setupLights(this.scene, {
+      ambientLightColor: defaults.ambientLightColor,
+      ambientLightIntensity: defaults.ambientLightIntensity,
+      directionalLightColor: defaults.directionalLightColor,
+      directionalLightIntensity: defaults.directionalLightIntensity,
+      directionalLightPosition: defaults.directionalLightPosition
+    });
     
-    this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    this.directionalLight.position.set(5, 10, 7.5);
-    this.scene.add(this.directionalLight);
+    this.ambientLight = lights.ambientLight;
+    this.directionalLight = lights.directionalLight;
     
     // Setup grid
-    this.grid = new THREE.GridHelper(100, 100, 0x888888, 0x444444);
+    this.grid = SceneRenderingService.createGrid({
+      size: defaults.gridSize,
+      divisions: defaults.gridDivisions,
+      color1: defaults.gridColor1,
+      color2: defaults.gridColor2,
+      visible: defaults.gridVisible
+    });
     this.scene.add(this.grid);
-    this.gridVisible = true;
+    this.gridVisible = defaults.gridVisible;
     
-    // Store current model
+    // Animation and model state
+    this.clock = new THREE.Clock();
+    this.mixer = null;
     this.currentModel = null;
-    
-    // Origin gizmo (axes helper)
     this.originGizmo = null;
     
-    // Camera presets
-    this.cameraPresets = {
-      perspective: { position: new THREE.Vector3(0, 1.6, 3), target: new THREE.Vector3(0, 1, 0) },
-      front: { position: new THREE.Vector3(0, 1.6, 3), target: new THREE.Vector3(0, 1.6, 0) },
-      back: { position: new THREE.Vector3(0, 1.6, -3), target: new THREE.Vector3(0, 1.6, 0) },
-      left: { position: new THREE.Vector3(-3, 1.6, 0), target: new THREE.Vector3(0, 1.6, 0) },
-      right: { position: new THREE.Vector3(3, 1.6, 0), target: new THREE.Vector3(0, 1.6, 0) },
-      top: { position: new THREE.Vector3(0, 5, 0), target: new THREE.Vector3(0, 0, 0) },
-      bottom: { position: new THREE.Vector3(0, -5, 0), target: new THREE.Vector3(0, 0, 0) }
-    };
+    // Store camera presets from service
+    this.cameraPresets = CameraCalculationService.getCameraPresets();
   }
   
+  /**
+   * Start the render loop using service
+   */
   startRenderLoop() {
-    const animate = () => {
-      requestAnimationFrame(animate);
-      
-      const delta = this.clock.getDelta();
-      
-      if (this.mixer) {
-        this.mixer.update(delta);
-      }
-      
-      this.controls.update();
-      this.renderer.render(this.scene, this.camera);
-    };
-    
-    animate();
+    this.stopRenderLoop = SceneRenderingService.startRenderLoop({
+      renderer: this.renderer,
+      scene: this.scene,
+      camera: this.camera,
+      mixer: this.mixer,
+      controls: this.controls,
+      clock: this.clock
+    });
   }
   
+  /**
+   * Handle window resize using service
+   */
   handleResize() {
-    const width = this.canvas.clientWidth;
-    const height = this.canvas.clientHeight;
-    
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
+    SceneRenderingService.handleResize(this.renderer, this.camera, this.canvas);
   }
   
+  /**
+   * Set background color using service
+   */
   setBackgroundColor(color) {
-    this.scene.background = new THREE.Color(color);
+    SceneRenderingService.updateBackgroundColor(this.scene, color);
   }
   
+  /**
+   * Update light position using service
+   */
   updateLightPosition(x, y, z) {
-    this.directionalLight.position.set(x, y, z);
+    SceneRenderingService.updateLightPosition(this.directionalLight, { x, y, z });
   }
   
+  /**
+   * Update directional light intensity using service
+   */
   updateDirectionalLightIntensity(value) {
-    this.directionalLight.intensity = value;
+    SceneRenderingService.updateLightIntensity(this.directionalLight, value);
   }
   
+  /**
+   * Update ambient light intensity using service
+   */
   updateAmbientLightIntensity(value) {
-    this.ambientLight.intensity = value;
+    SceneRenderingService.updateLightIntensity(this.ambientLight, value);
   }
   
+  /**
+   * Toggle grid visibility
+   */
   toggleGrid(visible) {
     this.grid.visible = visible;
     this.gridVisible = visible;
   }
   
+  /**
+   * Apply camera preset
+   */
   applyCameraPreset(presetName) {
     const preset = this.cameraPresets[presetName];
     if (!preset) return;
     
-    this.camera.position.copy(preset.position);
-    this.controls.target.copy(preset.target);
+    // Convert service format to Three.js objects
+    this.camera.position.set(preset.position.x, preset.position.y, preset.position.z);
+    this.controls.target.set(preset.target.x, preset.target.y, preset.target.z);
     this.controls.update();
   }
   
+  /**
+   * Clear model from scene using service
+   */
   clearModel() {
     if (this.currentModel) {
       this.scene.remove(this.currentModel);
-      
-      // Dispose of geometries and materials
-      this.currentModel.traverse((child) => {
-        if (child.geometry) {
-          child.geometry.dispose();
-        }
-        if (child.material) {
-          if (Array.isArray(child.material)) {
-            child.material.forEach(material => material.dispose());
-          } else {
-            child.material.dispose();
-          }
-        }
-      });
-      
+      SceneRenderingService.disposeModel(this.currentModel);
       this.currentModel = null;
     }
     
@@ -158,12 +171,12 @@ export class SceneManager {
     }
   }
   
+  /**
+   * Add model to scene using positioning service
+   */
   addModel(model, options = {}) {
     this.clearModel();
     this.currentModel = model;
-    
-    // Models are now in canonical space (right-handed, Y-up, Z-forward, 1 unit = 1 meter)
-    // No rotation corrections needed - just position and frame the model
     
     // Store rotation and position if preserve options are set
     const savedRotation = options.preserveRotation ? model.rotation.clone() : null;
@@ -181,12 +194,15 @@ export class SceneManager {
     // Update world matrix after adding to scene
     model.updateMatrixWorld(true);
     
-    // Get bounding box for positioning
-    const box = new THREE.Box3().setFromObject(model);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
+    // Get bounding box using service
+    const box = SceneRenderingService.calculateBoundingBox(model);
+    const { center, size } = SceneRenderingService.getBoundingBoxInfo(box);
     
-    console.log('Model in canonical space:', { size, center });
+    console.log('Model in canonical space:', { 
+      size: { x: size.x, y: size.y, z: size.z },
+      center: { x: center.x, y: center.y, z: center.z }
+    });
+    
     if (savedRotation) {
       console.log('Preserving rotation during addModel:', savedRotation);
     }
@@ -196,13 +212,13 @@ export class SceneManager {
     
     // Only recalculate position if not preserving it
     if (!savedPosition) {
-      // Position model so its bottom sits on the grid (y=0)
-      // Center horizontally (X and Z)
-      model.position.x = -center.x;
-      model.position.z = -center.z;
-      // Position bottom at grid level
-      model.position.y = -box.min.y;
+      // Calculate position using service
+      const position = ModelPositioningService.calculateModelPosition({
+        min: { x: box.min.x, y: box.min.y, z: box.min.z },
+        max: { x: box.max.x, y: box.max.y, z: box.max.z }
+      });
       
+      model.position.set(position.x, position.y, position.z);
       console.log('Model positioned:', model.position);
     } else {
       // Restore saved position
@@ -210,15 +226,23 @@ export class SceneManager {
       console.log('Restored position:', model.position);
     }
     
-    // Adjust grid size based on model
-    const gridSize = Math.max(10, Math.ceil(Math.max(size.x, size.z) * 3));
-    this.scene.remove(this.grid);
-    this.grid = new THREE.GridHelper(gridSize, gridSize, 0x888888, 0x444444);
-    if (this.gridVisible) {
-      this.scene.add(this.grid);
-    }
+    // Calculate grid size using service
+    const gridSize = ModelPositioningService.calculateGridSize(
+      { x: size.x, y: size.y, z: size.z },
+      3, // multiplier
+      10  // min size
+    );
     
-    // Add origin gizmo to visualize model's pivot point
+    // Update grid
+    this.scene.remove(this.grid);
+    this.grid = SceneRenderingService.createGrid({
+      size: gridSize,
+      divisions: gridSize,
+      visible: this.gridVisible
+    });
+    this.scene.add(this.grid);
+    
+    // Add origin gizmo
     this.updateOriginGizmo();
     
     // Frame model in camera view
@@ -237,67 +261,85 @@ export class SceneManager {
       this.originGizmo.dispose();
     }
     
-    // Create axes helper at model's position (shows model's local origin)
-    // Red = X axis, Green = Y axis, Blue = Z axis
-    this.originGizmo = new THREE.AxesHelper(0.5); // 0.5 units size
-    
-    // Position gizmo at model's origin (same position as model)
-    this.originGizmo.position.copy(this.currentModel.position);
-    this.originGizmo.rotation.copy(this.currentModel.rotation);
+    // Create axes helper at model's position using service
+    this.originGizmo = SceneRenderingService.createAxesHelper(
+      0.5,
+      {
+        x: this.currentModel.position.x,
+        y: this.currentModel.position.y,
+        z: this.currentModel.position.z
+      },
+      {
+        x: this.currentModel.rotation.x,
+        y: this.currentModel.rotation.y,
+        z: this.currentModel.rotation.z
+      }
+    );
     
     this.scene.add(this.originGizmo);
     console.log('Origin gizmo added at:', this.currentModel.position);
   }
   
   /**
-   * Adjust camera to frame the current model in view
+   * Adjust camera to frame the current model in view using services
    */
   frameModel() {
     if (!this.currentModel) return;
     
-    const box = new THREE.Box3().setFromObject(this.currentModel);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
+    // Get bounding box using service
+    const box = SceneRenderingService.calculateBoundingBox(this.currentModel);
+    const { center, size } = SceneRenderingService.getBoundingBoxInfo(box);
     
-    // Calculate distance needed to fit model in view
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const fov = this.camera.fov * (Math.PI / 180);
+    // Calculate distance using camera service
+    const distance = CameraCalculationService.calculateFramingDistance(
+      { x: size.x, y: size.y, z: size.z },
+      this.camera.fov,
+      2.5 // padding factor
+    );
     
-    // Calculate required distance to fit the model
-    const cameraDistance = maxDim / (2 * Math.tan(fov / 2));
+    // Calculate camera position using service
+    const cameraPosition = CameraCalculationService.calculateCameraPosition(
+      distance,
+      Math.PI / 4, // 45 degrees horizontal
+      0.3,         // vertical angle multiplier
+      { y: size.y }
+    );
     
-    // Add substantial padding (2.5x) for comfortable viewing
-    const distance = cameraDistance * 2.5;
+    this.camera.position.set(cameraPosition.x, cameraPosition.y, cameraPosition.z);
     
-    // Position camera at an angle (45 degrees around, elevated)
-    const angle = Math.PI / 4; // 45 degrees
-    const cameraX = Math.sin(angle) * distance;
-    const cameraZ = Math.cos(angle) * distance;
-    const cameraY = size.y * 0.5 + distance * 0.3; // Elevated view
+    // Calculate camera target using service
+    const target = CameraCalculationService.calculateCameraTarget({
+      x: center.x,
+      y: center.y,
+      z: center.z
+    });
     
-    this.camera.position.set(cameraX, cameraY, cameraZ);
-    
-    // Look at center of model
-    this.controls.target.copy(center);
+    this.controls.target.set(target.x, target.y, target.z);
     this.controls.update();
     
     console.log('Camera framed model:', { 
-      modelSize: size, 
-      maxDim,
+      modelSize: { x: size.x, y: size.y, z: size.z },
+      maxDim: ModelPositioningService.getMaxDimension({ x: size.x, y: size.y, z: size.z }),
       distance: distance.toFixed(2),
       cameraPos: this.camera.position, 
       target: this.controls.target 
     });
   }
   
+  /**
+   * Create animation mixer using service
+   */
   createMixer(model) {
     if (this.mixer) {
       this.mixer.stopAllAction();
     }
-    this.mixer = new THREE.AnimationMixer(model);
+    this.mixer = SceneRenderingService.createAnimationMixer(model);
     return this.mixer;
   }
   
+  /**
+   * Getters for scene components
+   */
   getScene() {
     return this.scene;
   }
@@ -322,35 +364,14 @@ export class SceneManager {
     return this.canvas;
   }
   
+  /**
+   * Clear scene and dispose of resources
+   */
   clearScene() {
     // Remove current model from scene
     if (this.currentModel) {
       this.scene.remove(this.currentModel);
-      
-      // Dispose of geometries and materials
-      this.currentModel.traverse((child) => {
-        if (child.isMesh) {
-          if (child.geometry) child.geometry.dispose();
-          if (child.material) {
-            if (Array.isArray(child.material)) {
-              child.material.forEach(material => {
-                if (material.map) material.map.dispose();
-                if (material.normalMap) material.normalMap.dispose();
-                if (material.roughnessMap) material.roughnessMap.dispose();
-                if (material.metalnessMap) material.metalnessMap.dispose();
-                material.dispose();
-              });
-            } else {
-              if (child.material.map) child.material.map.dispose();
-              if (child.material.normalMap) child.material.normalMap.dispose();
-              if (child.material.roughnessMap) child.material.roughnessMap.dispose();
-              if (child.material.metalnessMap) child.material.metalnessMap.dispose();
-              child.material.dispose();
-            }
-          }
-        }
-      });
-      
+      SceneRenderingService.disposeModel(this.currentModel);
       this.currentModel = null;
     }
     
@@ -362,5 +383,20 @@ export class SceneManager {
     
     // Reset clock
     this.clock = new THREE.Clock();
+  }
+  
+  /**
+   * Capture current scene state
+   * @returns {Object} Current scene state
+   */
+  captureState() {
+    return SceneStateService.captureSceneState({
+      scene: this.scene,
+      camera: this.camera,
+      ambientLight: this.ambientLight,
+      directionalLight: this.directionalLight,
+      grid: this.grid,
+      controls: this.controls
+    });
   }
 }
