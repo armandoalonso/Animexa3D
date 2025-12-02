@@ -1,6 +1,7 @@
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import * as THREE from 'three';
+import { CoordinateSystemDetector } from './CoordinateSystemDetector.js';
 
 export class ModelLoader {
   constructor(sceneManager) {
@@ -8,6 +9,7 @@ export class ModelLoader {
     this.gltfLoader = new GLTFLoader();
     this.fbxLoader = new FBXLoader();
     this.currentModelData = null;
+    this.coordinateDetector = new CoordinateSystemDetector();
   }
   
   async loadFromBuffer(arrayBuffer, extension, filename) {
@@ -76,10 +78,14 @@ export class ModelLoader {
         arrayBuffer,
         '',
         (gltf) => {
+          // Apply canonical space conversion immediately after loading
+          const conversion = this.coordinateDetector.convertToCanonicalSpace(gltf.scene);
+          
           const modelData = {
             model: gltf.scene,
             animations: gltf.animations || [],
-            skeletons: this.extractSkeletons(gltf.scene)
+            skeletons: this.extractSkeletons(gltf.scene),
+            coordinateConversion: conversion
           };
           resolve(modelData);
         },
@@ -94,10 +100,15 @@ export class ModelLoader {
     return new Promise((resolve, reject) => {
       try {
         const object = this.fbxLoader.parse(arrayBuffer, '');
+        
+        // Apply canonical space conversion immediately after loading
+        const conversion = this.coordinateDetector.convertToCanonicalSpace(object);
+        
         const modelData = {
           model: object,
           animations: object.animations || [],
-          skeletons: this.extractSkeletons(object)
+          skeletons: this.extractSkeletons(object),
+          coordinateConversion: conversion
         };
         resolve(modelData);
       } catch (error) {

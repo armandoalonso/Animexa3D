@@ -513,6 +513,49 @@ export class TextureManager {
   }
 
   /**
+   * Remove a texture from a material
+   * @param {string} materialUuid - UUID of the material to update
+   * @param {string} textureKey - Key of the texture slot (e.g., 'map', 'normalMap')
+   * @returns {boolean} Success status
+   */
+  removeTexture(materialUuid, textureKey) {
+    const materialData = this.materials.find(m => m.uuid === materialUuid);
+    if (!materialData) {
+      console.error('Material not found:', materialUuid);
+      return false;
+    }
+
+    try {
+      // Get the texture to dispose
+      const oldTexture = materialData.material[textureKey];
+      
+      if (oldTexture) {
+        // Dispose the texture
+        oldTexture.dispose();
+      }
+
+      // Remove texture from material
+      materialData.material[textureKey] = null;
+      materialData.material.needsUpdate = true;
+
+      // Remove texture data from our records
+      if (materialData.textures[textureKey]) {
+        delete materialData.textures[textureKey];
+      }
+
+      // Force update on all meshes using this material
+      materialData.meshes.forEach(mesh => {
+        mesh.material = materialData.material;
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Failed to remove texture:', error);
+      return false;
+    }
+  }
+
+  /**
    * Get thumbnail data URL for a texture
    * @param {THREE.Texture} texture - The texture to create thumbnail from
    * @param {number} size - Thumbnail size (default 64)

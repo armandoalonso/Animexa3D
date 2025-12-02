@@ -47,16 +47,6 @@ export class UIManager {
     document.getElementById('camera-preset').addEventListener('change', (e) => this.handleCameraPreset(e));
     document.getElementById('grid-toggle').addEventListener('change', (e) => this.handleGridToggle(e));
     
-    // Model rotation controls
-    document.getElementById('btn-rotate-x-90').addEventListener('click', () => this.sceneManager.rotateModel('x', 90));
-    document.getElementById('btn-rotate-x-minus-90').addEventListener('click', () => this.sceneManager.rotateModel('x', -90));
-    document.getElementById('btn-rotate-y-90').addEventListener('click', () => this.sceneManager.rotateModel('y', 90));
-    document.getElementById('btn-rotate-y-minus-90').addEventListener('click', () => this.sceneManager.rotateModel('y', -90));
-    document.getElementById('btn-rotate-z-90').addEventListener('click', () => this.sceneManager.rotateModel('z', 90));
-    document.getElementById('btn-rotate-z-minus-90').addEventListener('click', () => this.sceneManager.rotateModel('z', -90));
-    document.getElementById('btn-reset-rotation').addEventListener('click', () => this.sceneManager.resetModelRotation());
-    document.getElementById('btn-reset-position').addEventListener('click', () => this.sceneManager.resetModelPosition());
-    
     // Custom camera preset controls
     document.getElementById('btn-save-camera-view').addEventListener('click', () => this.handleSaveCameraView());
     document.getElementById('custom-camera-preset').addEventListener('change', (e) => this.handleLoadCustomPreset(e));
@@ -2294,7 +2284,8 @@ export class UIManager {
     
     const button = document.createElement('button');
     button.className = `btn-change-texture ${isEmpty ? 'btn-add-texture' : ''}`;
-    button.textContent = isEmpty ? 'Add' : 'Change';
+    button.textContent = '+';
+    button.title = isEmpty ? 'Add texture' : 'Change texture';
     button.setAttribute('data-material-uuid', materialUuid);
     button.setAttribute('data-texture-key', textureKey);
     
@@ -2303,6 +2294,22 @@ export class UIManager {
     });
     
     actions.appendChild(button);
+
+    // Add delete button if texture exists
+    if (!isEmpty) {
+      const deleteButton = document.createElement('button');
+      deleteButton.className = 'btn-delete-texture';
+      deleteButton.textContent = '×';
+      deleteButton.title = 'Delete texture';
+      deleteButton.setAttribute('data-material-uuid', materialUuid);
+      deleteButton.setAttribute('data-texture-key', textureKey);
+      
+      deleteButton.addEventListener('click', () => {
+        this.handleDeleteTexture(materialUuid, textureKey);
+      });
+      
+      actions.appendChild(deleteButton);
+    }
 
     slot.appendChild(thumbnail);
     slot.appendChild(info);
@@ -2482,6 +2489,42 @@ export class UIManager {
     } catch (error) {
       console.error('Error changing texture:', error);
       this.showNotification(`Failed to change texture: ${error.message}`, 'error');
+    }
+  }
+
+  /**
+   * Handle texture delete button click
+   */
+  handleDeleteTexture(materialUuid, textureKey) {
+    const materialData = this.textureManager.getMaterialByUuid(materialUuid);
+    const textureData = materialData?.textures[textureKey];
+    const slotInfo = this.textureManager.getTextureSlotInfo(textureKey);
+    
+    const textureName = textureData?.source || slotInfo.label;
+    const materialName = materialData?.name || 'Unknown Material';
+    
+    // Confirm deletion
+    const confirmed = confirm(`Are you sure you want to remove the ${textureName} texture from ${materialName}?`);
+    
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      // Remove the texture
+      const success = this.textureManager.removeTexture(materialUuid, textureKey);
+
+      if (success) {
+        this.showNotification('Texture removed successfully!', 'success');
+        
+        // Refresh the texture display
+        this.displayTextures();
+      } else {
+        this.showNotification('Failed to remove texture', 'error');
+      }
+    } catch (error) {
+      console.error('Error deleting texture:', error);
+      this.showNotification(`Failed to delete texture: ${error.message}`, 'error');
     }
   }
 

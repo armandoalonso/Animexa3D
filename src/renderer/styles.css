@@ -404,31 +404,62 @@ html, body {
 .texture-actions {
   flex-shrink: 0;
   margin-left: 0.5rem;
+  display: flex;
+  gap: 0.25rem;
 }
 
 .btn-change-texture {
-  padding: 0.35rem 0.6rem;
-  font-size: 0.75rem;
-  background: #00d1b2;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 1.2rem;
+  line-height: 1;
+  background: #48c774;
   color: #ffffff;
   border: none;
   border-radius: 3px;
   cursor: pointer;
   transition: all 0.2s ease;
-  font-weight: 500;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-change-texture:hover {
-  background: #00c4a7;
+  background: #3ec46d;
   transform: translateY(-1px);
 }
 
 .btn-change-texture.btn-add-texture {
-  background: #3298dc;
+  background: #48c774;
 }
 
 .btn-change-texture.btn-add-texture:hover {
-  background: #2793da;
+  background: #3ec46d;
+}
+
+.btn-delete-texture {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+  background: #f14668;
+  color: #ffffff;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-delete-texture:hover {
+  background: #ef2e55;
+  transform: translateY(-1px);
 }
 
 .texture-slot.empty-slot {
