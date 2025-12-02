@@ -9,17 +9,21 @@ import { RetargetManager } from './modules/retargeting/RetargetManager.js';
 import { TextureManager } from './modules/io/TextureManager.js';
 import { ProjectManager } from './modules/io/ProjectManager.js';
 import { CameraPresetManager } from './modules/core/CameraPresetManager.js';
+import { ExportUIAdapter } from './modules/io/adapters/ExportUIAdapter.js';
 
 // Initialize managers
 const sceneManager = new SceneManager();
 const modelLoader = new ModelLoader(sceneManager);
 const animationManager = new AnimationManager(sceneManager);
-const exportManager = new ExportManager(sceneManager, animationManager);
+const exportManager = new ExportManager(sceneManager, animationManager, null); // UIManager set later
 const retargetManager = new RetargetManager(sceneManager, modelLoader, animationManager);
 const textureManager = new TextureManager();
 const projectManager = new ProjectManager(sceneManager, modelLoader, animationManager, textureManager);
 const cameraPresetManager = new CameraPresetManager(sceneManager);
 const uiManager = new UIManager(sceneManager, modelLoader, animationManager, exportManager, retargetManager, textureManager, projectManager, cameraPresetManager);
+
+// Set UIManager reference after creation to avoid circular dependency
+exportManager.uiAdapter = new ExportUIAdapter(uiManager);
 
 // Start the render loop
 sceneManager.startRenderLoop();
