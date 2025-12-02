@@ -25,6 +25,17 @@ export class CoordinateSystemDetector {
    * @returns {Object} Detection result with handedness, up-axis, forward-axis, and scale
    */
   detectCoordinateSystem(model) {
+    // Guard against null/undefined model
+    if (!model) {
+      return {
+        handedness: 'right',
+        upAxis: 'Y',
+        forwardAxis: 'Z',
+        estimatedScale: 1.0,
+        confidence: { upAxis: 0, forwardAxis: 0, scale: 0 }
+      };
+    }
+
     const detection = {
       handedness: 'right', // Three.js default is right-handed
       upAxis: null,
@@ -266,6 +277,7 @@ export class CoordinateSystemDetector {
 
     const detection = this.detectCoordinateSystem(model);
     const conversions = {
+      applied: false,
       rotationApplied: false,
       scaleApplied: false,
       rotation: { axis: null, angle: 0 },
@@ -276,6 +288,7 @@ export class CoordinateSystemDetector {
     // Apply coordinate system conversion
     if (detection.upAxis !== this.CANONICAL_UP_AXIS) {
       this.applyAxisConversion(model, detection.upAxis, this.CANONICAL_UP_AXIS);
+      conversions.applied = true;
       conversions.rotationApplied = true;
       conversions.rotation = {
         from: `${detection.upAxis}-up`,
@@ -288,6 +301,7 @@ export class CoordinateSystemDetector {
     if (Math.abs(detection.estimatedScale - this.CANONICAL_UNIT_SCALE) > 0.01) {
       const scaleFactor = detection.estimatedScale / this.CANONICAL_UNIT_SCALE;
       model.scale.multiplyScalar(scaleFactor);
+      conversions.applied = true;
       conversions.scaleApplied = true;
       conversions.scaleFactor = scaleFactor;
       console.log(`  ✓ Applied scale factor: ${scaleFactor.toFixed(4)}x (normalized to 1 unit = 1 meter)`);

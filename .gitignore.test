@@ -1,0 +1,4 @@
+# .gitignore additions for test coverage
+coverage/
+.nyc_output/
+*.lcov

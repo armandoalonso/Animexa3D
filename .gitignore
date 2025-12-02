@@ -6,3 +6,8 @@ release/
 *.log
 .DS_Store
 Thumbs.db
+
+# Test coverage
+coverage/
+.nyc_output/
+*.lcov

@@ -13,6 +13,15 @@ A powerful desktop application for viewing, managing, and exporting 3D animated 
 
 ## 🛠️ Development
 
+### Testing
+
+```
+npm test              # Run tests in watch mode
+npm run test:run      # Run all tests once
+npm run test:ui       # Open visual test interface
+npm run test:coverage # Generate coverage report
+```
+
 ### Tech Stack
 
 - **Electron 28.0** - Cross-platform desktop framework
