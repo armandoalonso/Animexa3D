@@ -1,12 +1,30 @@
 import * as THREE from 'three';
-import { TGALoader } from 'three/examples/jsm/loaders/TGALoader.js';
+import { TextureExtractionService } from './services/TextureExtractionService.js';
+import { TextureMetadataService } from './services/TextureMetadataService.js';
+import { MaterialManagementService } from './services/MaterialManagementService.js';
+import { TextureLoaderService } from './services/TextureLoaderService.js';
 
+/**
+ * TextureManager
+ * Thin orchestrator that delegates to specialized services
+ * Handles coordination between services and UI updates
+ */
 export class TextureManager {
   constructor() {
-    this.materials = [];
+    // Initialize services
+    this.extractionService = new TextureExtractionService();
+    this.metadataService = new TextureMetadataService();
+    this.managementService = new MaterialManagementService();
+    this.loaderService = new TextureLoaderService(null, this.metadataService);
+    
+    // Set up file reader dependency for loader service
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      this.loaderService.setFileReader(window.electronAPI);
+    }
+    
+    // Legacy compatibility
     this.textureCache = new Map();
     this.tempTexturePath = null;
-    this.tgaLoader = new TGALoader();
   }
 
   /**
@@ -15,44 +33,9 @@ export class TextureManager {
    * @returns {Array} Array of material data with texture information
    */
   extractMaterials(model) {
-    this.materials = [];
-    const materialMap = new Map();
-
-    model.traverse((child) => {
-      if (child.isMesh && child.material) {
-        const materials = Array.isArray(child.material) 
-          ? child.material 
-          : [child.material];
-
-        materials.forEach((material) => {
-          // Avoid duplicates
-          if (materialMap.has(material.uuid)) {
-            return;
-          }
-
-          const materialData = {
-            uuid: material.uuid,
-            name: material.name || `Material ${this.materials.length + 1}`,
-            material: material,
-            textures: this.extractTexturesFromMaterial(material),
-            meshes: [] // Track which meshes use this material
-          };
-
-          materialMap.set(material.uuid, materialData);
-          this.materials.push(materialData);
-        });
-
-        // Track which meshes use which materials
-        materials.forEach((material) => {
-          const matData = materialMap.get(material.uuid);
-          if (matData) {
-            matData.meshes.push(child);
-          }
-        });
-      }
-    });
-
-    return this.materials;
+    const materials = this.extractionService.extractMaterialsFromModel(model);
+    this.managementService.setMaterials(materials);
+    return materials;
   }
 
   /**
@@ -61,39 +44,7 @@ export class TextureManager {
    * @returns {Object} Object containing texture slot information
    */
   extractTexturesFromMaterial(material) {
-    const textures = {};
-
-    // Common texture maps
-    const textureSlots = [
-      { key: 'map', label: 'Albedo/Diffuse', shortLabel: 'Albedo' },
-      { key: 'normalMap', label: 'Normal Map', shortLabel: 'Normal' },
-      { key: 'roughnessMap', label: 'Roughness Map', shortLabel: 'Roughness' },
-      { key: 'metalnessMap', label: 'Metalness Map', shortLabel: 'Metalness' },
-      { key: 'aoMap', label: 'Ambient Occlusion', shortLabel: 'AO' },
-      { key: 'emissiveMap', label: 'Emissive Map', shortLabel: 'Emissive' },
-      { key: 'specularMap', label: 'Specular Map', shortLabel: 'Specular' },
-      { key: 'alphaMap', label: 'Alpha Map', shortLabel: 'Alpha' },
-      { key: 'bumpMap', label: 'Bump Map', shortLabel: 'Bump' },
-      { key: 'displacementMap', label: 'Displacement Map', shortLabel: 'Displacement' },
-      { key: 'lightMap', label: 'Light Map', shortLabel: 'Light' },
-      { key: 'envMap', label: 'Environment Map', shortLabel: 'Environment' }
-    ];
-
-    textureSlots.forEach(slot => {
-      if (material[slot.key]) {
-        const texture = material[slot.key];
-        textures[slot.key] = {
-          texture: texture,
-          label: slot.label,
-          shortLabel: slot.shortLabel,
-          source: this.getTextureSource(texture),
-          image: texture.image,
-          uuid: texture.uuid
-        };
-      }
-    });
-
-    return textures;
+    return this.extractionService.extractTexturesFromMaterial(material);
   }
 
   /**
@@ -102,39 +53,7 @@ export class TextureManager {
    * @returns {string} The texture source path or description
    */
   getTextureSource(texture) {
-    if (texture.image) {
-      if (texture.image.src) {
-        // Extract filename from data URL or path
-        if (texture.image.src.startsWith('data:')) {
-          return 'Embedded';
-        }
-        if (texture.image.src.startsWith('blob:')) {
-          return 'Blob Texture';
-        }
-        // Try to extract filename from URL
-        const urlPath = texture.image.src.split('/').pop();
-        const cleanPath = urlPath.split('?')[0]; // Remove query params
-        return cleanPath || 'Texture';
-      } else if (texture.image.currentSrc) {
-        const urlPath = texture.image.currentSrc.split('/').pop();
-        const cleanPath = urlPath.split('?')[0];
-        return cleanPath || 'Texture';
-      } else if (texture.image instanceof HTMLCanvasElement) {
-        return 'Canvas/Embedded';
-      }
-    }
-    
-    // Check if texture was loaded from a file
-    if (texture.userData && texture.userData.path) {
-      return texture.userData.path.split('/').pop();
-    }
-
-    // Check texture name
-    if (texture.name) {
-      return texture.name;
-    }
-
-    return 'Embedded/Generated';
+    return this.extractionService.getTextureSource(texture);
   }
 
   /**
@@ -145,161 +64,42 @@ export class TextureManager {
    * @returns {Promise<boolean>} Success status
    */
   async updateTexture(materialUuid, textureKey, imagePath) {
-    const materialData = this.materials.find(m => m.uuid === materialUuid);
+    const materialData = this.managementService.getMaterialByUuid(materialUuid);
     if (!materialData) {
       console.error('Material not found:', materialUuid);
       return false;
     }
 
     try {
-      // Check file extension to determine loader
-      const fileExtension = imagePath.split('.').pop().toLowerCase();
+      // Load the new texture using the loader service
+      const oldTexture = materialData.material[textureKey];
+      const newTexture = await this.loaderService.loadTextureFromFile(imagePath, oldTexture);
       
-      let newTexture;
-      
-      if (fileExtension === 'tga') {
-        // Use TGALoader for TGA files
-        const imageData = await window.electronAPI.readImageFile(imagePath);
-        const uint8Array = new Uint8Array(imageData);
-        const blob = new Blob([uint8Array], { type: 'image/x-tga' });
-        const url = URL.createObjectURL(blob);
-        
-        newTexture = await new Promise((resolve, reject) => {
-          this.tgaLoader.load(
-            url,
-            (texture) => {
-              try {
-                // Copy settings from old texture if it exists
-                const oldTexture = materialData.material[textureKey];
-                if (oldTexture) {
-                  texture.wrapS = oldTexture.wrapS;
-                  texture.wrapT = oldTexture.wrapT;
-                  texture.repeat.copy(oldTexture.repeat);
-                  texture.offset.copy(oldTexture.offset);
-                  texture.rotation = oldTexture.rotation;
-                  texture.center.copy(oldTexture.center);
-                  
-                  // Dispose old texture
-                  oldTexture.dispose();
-                } else {
-                  // Default settings for new texture
-                  texture.wrapS = THREE.RepeatWrapping;
-                  texture.wrapT = THREE.RepeatWrapping;
-                }
+      // Set appropriate color space
+      this.loaderService.setColorSpace(newTexture, textureKey);
 
-                // Set color space based on texture type
-                if (textureKey === 'normalMap' || textureKey === 'roughnessMap' || 
-                    textureKey === 'metalnessMap' || textureKey === 'aoMap') {
-                  texture.colorSpace = THREE.LinearSRGBColorSpace;
-                } else {
-                  texture.colorSpace = THREE.SRGBColorSpace;
-                }
-
-                // Store path in userData
-                texture.userData.path = imagePath;
-                texture.needsUpdate = true;
-                
-                URL.revokeObjectURL(url);
-                resolve(texture);
-              } catch (error) {
-                URL.revokeObjectURL(url);
-                reject(error);
-              }
-            },
-            undefined,
-            (error) => {
-              URL.revokeObjectURL(url);
-              reject(new Error(`Failed to load TGA: ${error}`));
-            }
-          );
-        });
-      } else {
-        // Use standard image loading for PNG, JPG, etc.
-        const imageData = await window.electronAPI.readImageFile(imagePath);
-        const uint8Array = new Uint8Array(imageData);
-        const blob = new Blob([uint8Array], { type: this.getMimeType(imagePath) });
-        const url = URL.createObjectURL(blob);
-
-        // Create image element and load the texture
-        const img = new Image();
-        
-        newTexture = await new Promise((resolve, reject) => {
-          img.onload = () => {
-            try {
-              // Create texture from loaded image
-              const texture = new THREE.Texture(img);
-              
-              // Copy settings from old texture if it exists
-              const oldTexture = materialData.material[textureKey];
-              if (oldTexture) {
-                texture.wrapS = oldTexture.wrapS;
-                texture.wrapT = oldTexture.wrapT;
-                texture.repeat.copy(oldTexture.repeat);
-                texture.offset.copy(oldTexture.offset);
-                texture.rotation = oldTexture.rotation;
-                texture.center.copy(oldTexture.center);
-                
-                // Dispose old texture
-                oldTexture.dispose();
-              } else {
-                // Default settings for new texture
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
-              }
-
-              // Special settings for normal maps
-              if (textureKey === 'normalMap') {
-                texture.colorSpace = THREE.LinearSRGBColorSpace;
-              } else {
-                texture.colorSpace = THREE.SRGBColorSpace;
-              }
-
-              // Store path in userData
-              texture.userData.path = imagePath;
-              
-              // Mark texture as needing update
-              texture.needsUpdate = true;
-              
-              URL.revokeObjectURL(url);
-              resolve(texture);
-            } catch (error) {
-              URL.revokeObjectURL(url);
-              reject(error);
-            }
-          };
-          
-          img.onerror = (error) => {
-            URL.revokeObjectURL(url);
-            reject(new Error(`Failed to load image: ${error}`));
-          };
-          
-          img.src = url;
-        });
+      // Dispose old texture if it exists
+      if (oldTexture) {
+        this.loaderService.disposeTexture(oldTexture);
       }
 
       // Update material
       materialData.material[textureKey] = newTexture;
       materialData.material.needsUpdate = true;
 
-      // Update texture data in our records
-      if (!materialData.textures[textureKey]) {
-        const slot = this.getTextureSlotInfo(textureKey);
-        materialData.textures[textureKey] = {
-          texture: newTexture,
-          label: slot.label,
-          shortLabel: slot.shortLabel,
-          source: imagePath.split(/[/\\]/).pop(),
-          extractedPath: imagePath, // Store full path for saving
-          image: newTexture.image,
-          uuid: newTexture.uuid
-        };
-      } else {
-        materialData.textures[textureKey].texture = newTexture;
-        materialData.textures[textureKey].source = imagePath.split(/[/\\]/).pop();
-        materialData.textures[textureKey].extractedPath = imagePath; // Store full path for saving
-        materialData.textures[textureKey].image = newTexture.image;
-        materialData.textures[textureKey].uuid = newTexture.uuid;
-      }
+      // Update texture data in management service
+      const slot = this.metadataService.getTextureSlotInfo(textureKey);
+      const textureData = {
+        texture: newTexture,
+        label: slot.label,
+        shortLabel: slot.shortLabel,
+        source: this.extractionService.extractFilename(imagePath),
+        extractedPath: imagePath,
+        image: newTexture.image,
+        uuid: newTexture.uuid
+      };
+      
+      this.managementService.updateMaterialTexture(materialUuid, textureKey, textureData);
 
       // Force update on all meshes using this material
       materialData.meshes.forEach(mesh => {
@@ -319,21 +119,7 @@ export class TextureManager {
    * @returns {Object} Slot information
    */
   getTextureSlotInfo(key) {
-    const slots = {
-      map: { label: 'Albedo/Diffuse', shortLabel: 'Albedo' },
-      normalMap: { label: 'Normal Map', shortLabel: 'Normal' },
-      roughnessMap: { label: 'Roughness Map', shortLabel: 'Roughness' },
-      metalnessMap: { label: 'Metalness Map', shortLabel: 'Metalness' },
-      aoMap: { label: 'Ambient Occlusion', shortLabel: 'AO' },
-      emissiveMap: { label: 'Emissive Map', shortLabel: 'Emissive' },
-      specularMap: { label: 'Specular Map', shortLabel: 'Specular' },
-      alphaMap: { label: 'Alpha Map', shortLabel: 'Alpha' },
-      bumpMap: { label: 'Bump Map', shortLabel: 'Bump' },
-      displacementMap: { label: 'Displacement Map', shortLabel: 'Displacement' },
-      lightMap: { label: 'Light Map', shortLabel: 'Light' },
-      envMap: { label: 'Environment Map', shortLabel: 'Environment' }
-    };
-    return slots[key] || { label: key, shortLabel: key };
+    return this.metadataService.getTextureSlotInfo(key);
   }
 
   /**
@@ -342,19 +128,7 @@ export class TextureManager {
    * @returns {string} MIME type
    */
   getMimeType(path) {
-    const ext = path.split('.').pop().toLowerCase();
-    const mimeTypes = {
-      'jpg': 'image/jpeg',
-      'jpeg': 'image/jpeg',
-      'png': 'image/png',
-      'gif': 'image/gif',
-      'bmp': 'image/bmp',
-      'webp': 'image/webp',
-      'tga': 'image/tga',
-      'tiff': 'image/tiff',
-      'tif': 'image/tiff'
-    };
-    return mimeTypes[ext] || 'image/png';
+    return this.extractionService.getMimeType(path);
   }
 
   /**
@@ -369,34 +143,12 @@ export class TextureManager {
       for (const [key, textureData] of Object.entries(materialData.textures)) {
         const texture = textureData.texture;
         
-        // Check if texture is embedded (data URL or canvas element)
-        const isEmbedded = texture.image && (
-          (texture.image.src && texture.image.src.startsWith('data:')) ||
-          (texture.image instanceof HTMLCanvasElement) ||
-          (!texture.image.src && texture.image.currentSrc)
-        );
+        // Check if texture is embedded using extraction service
+        const isEmbedded = this.extractionService.isEmbeddedTexture(texture);
         
         if (isEmbedded) {
-          let dataUrl = null;
-          
-          // Get data URL from different sources
-          if (texture.image.src && texture.image.src.startsWith('data:')) {
-            dataUrl = texture.image.src;
-          } else if (texture.image instanceof HTMLCanvasElement) {
-            dataUrl = texture.image.toDataURL('image/png');
-          } else if (texture.image.currentSrc) {
-            // Try to convert to data URL
-            try {
-              const canvas = document.createElement('canvas');
-              canvas.width = texture.image.width || 512;
-              canvas.height = texture.image.height || 512;
-              const ctx = canvas.getContext('2d');
-              ctx.drawImage(texture.image, 0, 0);
-              dataUrl = canvas.toDataURL('image/png');
-            } catch (e) {
-              console.warn('Could not extract texture data:', e);
-            }
-          }
+          // Extract data URL using loader service
+          const dataUrl = await this.loaderService.extractEmbeddedTextureData(texture);
           
           if (dataUrl) {
             const promise = this.extractEmbeddedTexture(
@@ -406,7 +158,7 @@ export class TextureManager {
               materialData.name
             ).then(path => {
               if (path) {
-                textureData.source = path.split(/[/\\]/).pop();
+                textureData.source = this.extractionService.extractFilename(path);
                 textureData.extractedPath = path;
                 textureData.isEmbedded = true;
                 console.log(`Extracted embedded texture: ${materialData.name} - ${key}`);
@@ -436,20 +188,14 @@ export class TextureManager {
    */
   async extractEmbeddedTexture(materialUuid, textureKey, dataUrl, materialName) {
     try {
-      // Convert data URL to buffer
-      const base64Data = dataUrl.split(',')[1];
-      const bufferArray = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+      // Convert data URL to buffer using loader service
+      const bufferArray = this.loaderService.dataUrlToBuffer(dataUrl);
 
       // Determine file extension from data URL
-      const mimeMatch = dataUrl.match(/data:image\/(\w+);/);
-      let extension = mimeMatch ? mimeMatch[1] : 'png';
-      
-      // Handle special cases
-      if (extension === 'jpeg') extension = 'jpg';
+      const extension = this.loaderService.getExtensionFromDataUrl(dataUrl);
 
       // Create a safe filename
-      const safeMaterialName = materialName.replace(/[^a-zA-Z0-9]/g, '_');
-      const filename = `${safeMaterialName}_${textureKey}.${extension}`;
+      const filename = this.loaderService.createSafeFilename(materialName, textureKey, extension);
 
       // Save to temp directory via electron
       const path = await window.electronAPI.saveTextureToTemp(filename, Array.from(bufferArray));
@@ -467,15 +213,16 @@ export class TextureManager {
    */
   clear() {
     // Dispose all textures
-    this.materials.forEach(materialData => {
+    const materials = this.managementService.getMaterials();
+    materials.forEach(materialData => {
       Object.values(materialData.textures).forEach(textureData => {
         if (textureData.texture) {
-          textureData.texture.dispose();
+          this.loaderService.disposeTexture(textureData.texture);
         }
       });
     });
 
-    this.materials = [];
+    this.managementService.clearMaterials();
     this.textureCache.clear();
   }
 
@@ -484,20 +231,20 @@ export class TextureManager {
    * @returns {Array} Array of material data
    */
   getMaterials() {
-    return this.materials;
+    return this.managementService.getMaterials();
   }
   
   clearTextures() {
     // Clear texture cache
     this.textureCache.forEach((texture) => {
       if (texture && texture.dispose) {
-        texture.dispose();
+        this.loaderService.disposeTexture(texture);
       }
     });
     this.textureCache.clear();
     
-    // Clear materials array
-    this.materials = [];
+    // Clear materials
+    this.managementService.clearMaterials();
     
     // Reset temp texture path
     this.tempTexturePath = null;
@@ -509,7 +256,7 @@ export class TextureManager {
    * @returns {Object} Material data
    */
   getMaterialByUuid(uuid) {
-    return this.materials.find(m => m.uuid === uuid);
+    return this.managementService.getMaterialByUuid(uuid);
   }
 
   /**
@@ -519,7 +266,7 @@ export class TextureManager {
    * @returns {boolean} Success status
    */
   removeTexture(materialUuid, textureKey) {
-    const materialData = this.materials.find(m => m.uuid === materialUuid);
+    const materialData = this.managementService.getMaterialByUuid(materialUuid);
     if (!materialData) {
       console.error('Material not found:', materialUuid);
       return false;
@@ -530,18 +277,16 @@ export class TextureManager {
       const oldTexture = materialData.material[textureKey];
       
       if (oldTexture) {
-        // Dispose the texture
-        oldTexture.dispose();
+        // Dispose the texture using loader service
+        this.loaderService.disposeTexture(oldTexture);
       }
 
       // Remove texture from material
       materialData.material[textureKey] = null;
       materialData.material.needsUpdate = true;
 
-      // Remove texture data from our records
-      if (materialData.textures[textureKey]) {
-        delete materialData.textures[textureKey];
-      }
+      // Remove texture data from management service
+      this.managementService.removeMaterialTexture(materialUuid, textureKey);
 
       // Force update on all meshes using this material
       materialData.meshes.forEach(mesh => {
