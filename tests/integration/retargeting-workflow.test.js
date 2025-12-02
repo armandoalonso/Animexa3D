@@ -59,12 +59,12 @@ describe('Animation Retargeting Integration', () => {
       retargetManager.setSourceModel({
         model: sourceModel,
         animations: sourceAnimations,
-        skeletons: modelLoader.extractSkeletons(sourceModel)
+        skeletons: modelLoader.parsingService.extractSkeletons(sourceModel)
       });
 
       retargetManager.setTargetModel({
         model: targetModel,
-        skeletons: modelLoader.extractSkeletons(targetModel)
+        skeletons: modelLoader.parsingService.extractSkeletons(targetModel)
       });
 
       // Auto-map bones

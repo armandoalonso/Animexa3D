@@ -29,7 +29,7 @@ describe('ModelLoader', () => {
   });
 
   describe('extractSkeletons', () => {
-    it('should extract skeletons from skinned mesh', () => {
+    it('should extract skeletons from skinned mesh via parsing service', () => {
       const model = new THREE.Object3D();
       const geometry = new THREE.BoxGeometry(1, 1, 1);
       const material = new THREE.MeshBasicMaterial();
@@ -51,7 +51,7 @@ describe('ModelLoader', () => {
       mesh.bind(skeleton);
       model.add(mesh);
 
-      const result = modelLoader.extractSkeletons(model);
+      const result = modelLoader.parsingService.extractSkeletons(model);
 
       expect(result.bones.length).toBe(3);
       expect(result.boneNames).toContain('Root');
@@ -67,7 +67,7 @@ describe('ModelLoader', () => {
       );
       model.add(mesh);
 
-      const result = modelLoader.extractSkeletons(model);
+      const result = modelLoader.parsingService.extractSkeletons(model);
 
       expect(result.bones.length).toBe(0);
       expect(result.boneNames.length).toBe(0);
@@ -99,7 +99,7 @@ describe('ModelLoader', () => {
       model.add(mesh1);
       model.add(mesh2);
 
-      const result = modelLoader.extractSkeletons(model);
+      const result = modelLoader.parsingService.extractSkeletons(model);
 
       // Should not duplicate bones
       expect(result.bones.length).toBe(2);
@@ -107,7 +107,7 @@ describe('ModelLoader', () => {
   });
 
   describe('extractAllBones', () => {
-    it('should extract bones from hierarchy', () => {
+    it('should extract bones from hierarchy via parsing service', () => {
       const model = new THREE.Object3D();
       const bone1 = new THREE.Bone();
       const bone2 = new THREE.Bone();
@@ -121,7 +121,7 @@ describe('ModelLoader', () => {
       bone2.add(bone3);
       model.add(bone1);
 
-      const result = modelLoader.extractAllBones(model);
+      const result = modelLoader.parsingService.extractAllBones(model);
 
       expect(result.bones.length).toBe(3);
       expect(result.boneNames).toEqual(['Bone1', 'Bone2', 'Bone3']);
@@ -131,20 +131,20 @@ describe('ModelLoader', () => {
       const model = new THREE.Object3D();
       model.add(new THREE.Mesh());
 
-      const result = modelLoader.extractAllBones(model);
+      const result = modelLoader.parsingService.extractAllBones(model);
 
       expect(result.bones.length).toBe(0);
     });
   });
 
   describe('countPolygons', () => {
-    it('should count polygons with indexed geometry', () => {
+    it('should count polygons with indexed geometry via analysis service', () => {
       const model = new THREE.Object3D();
       const geometry = new THREE.BoxGeometry(1, 1, 1);
       const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
       model.add(mesh);
 
-      const count = modelLoader.countPolygons(model);
+      const count = modelLoader.analysisService.countPolygons(model);
 
       expect(count).toBeGreaterThan(0);
       expect(count).toBe(12); // Box has 12 triangles
@@ -163,7 +163,7 @@ describe('ModelLoader', () => {
       const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
       model.add(mesh);
 
-      const count = modelLoader.countPolygons(model);
+      const count = modelLoader.analysisService.countPolygons(model);
 
       expect(count).toBe(1); // One triangle
     });
@@ -171,14 +171,14 @@ describe('ModelLoader', () => {
     it('should return 0 for model without geometry', () => {
       const model = new THREE.Object3D();
 
-      const count = modelLoader.countPolygons(model);
+      const count = modelLoader.analysisService.countPolygons(model);
 
       expect(count).toBe(0);
     });
   });
 
   describe('countBones', () => {
-    it('should count bones in skeleton', () => {
+    it('should count bones in skeleton via analysis service', () => {
       const model = new THREE.Object3D();
       const mesh = new THREE.SkinnedMesh(
         new THREE.BoxGeometry(1, 1, 1),
@@ -190,7 +190,7 @@ describe('ModelLoader', () => {
       mesh.bind(skeleton);
       model.add(mesh);
 
-      const count = modelLoader.countBones(model);
+      const count = modelLoader.analysisService.countBones(model);
 
       expect(count).toBe(3);
     });
@@ -198,7 +198,7 @@ describe('ModelLoader', () => {
     it('should return 0 for model without bones', () => {
       const model = new THREE.Object3D();
 
-      const count = modelLoader.countBones(model);
+      const count = modelLoader.analysisService.countBones(model);
 
       expect(count).toBe(0);
     });
@@ -296,8 +296,8 @@ describe('ModelLoader', () => {
   });
 
   describe('updateModelInfo', () => {
-    it('should update DOM with model info', () => {
-      modelLoader.updateModelInfo('test.glb', 1500, 5, 25);
+    it('should update DOM with model info via UI adapter', () => {
+      modelLoader.uiAdapter.updateModelInfo('test.glb', 1500, 5, 25);
 
       expect(document.getElementById('info-name').textContent).toBe('test.glb');
       expect(document.getElementById('info-polygons').textContent).toBe('1,500');
@@ -307,7 +307,7 @@ describe('ModelLoader', () => {
     });
 
     it('should show N/A for zero bones', () => {
-      modelLoader.updateModelInfo('test.glb', 1000, 0, 0);
+      modelLoader.uiAdapter.updateModelInfo('test.glb', 1000, 0, 0);
 
       expect(document.getElementById('info-bones').textContent).toBe('N/A');
     });
