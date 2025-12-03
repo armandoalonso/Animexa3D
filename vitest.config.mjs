@@ -1,5 +1,8 @@
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   test: {
@@ -7,7 +10,7 @@ export default defineConfig({
     environment: 'happy-dom',
     setupFiles: ['./tests/setup.js'],
     include: ['tests/**/*.test.js', 'tests/**/*.spec.js'],
-    exclude: ['tests/smoke/**'],
+    exclude: ['tests/smoke/**', 'tests/e2e/**'],
     testTimeout: 10000,
     coverage: {
       provider: 'v8',

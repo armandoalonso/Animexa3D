@@ -1,5 +1,6 @@
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { LoadingManager } from 'three';
 
 /**
  * Pure service for parsing 3D model files
@@ -7,20 +8,28 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
  */
 export class ModelParsingService {
   constructor() {
-    this.gltfLoader = new GLTFLoader();
-    this.fbxLoader = new FBXLoader();
+    // Create a loading manager that handles missing textures gracefully
+    this.loadingManager = new LoadingManager();
+    
+    // Handle texture loading errors silently since we can't load external textures from ArrayBuffer
+    this.loadingManager.onError = (url) => {
+      console.warn(`Unable to load external resource: ${url}`);
+    };
+    
+    this.gltfLoader = new GLTFLoader(this.loadingManager);
+    this.fbxLoader = new FBXLoader(this.loadingManager);
   }
 
   /**
-   * Parse GLTF/GLB file from array buffer
-   * @param {ArrayBuffer} arrayBuffer - The file buffer
+   * Parse GLTF/GLB file from array buffer or string
+   * @param {ArrayBuffer|string} data - The file buffer (for GLB) or JSON string (for GLTF)
    * @returns {Promise<Object>} - Parsed model data with scene and animations
    */
-  parseGLTF(arrayBuffer) {
+  parseGLTF(data) {
     return new Promise((resolve, reject) => {
       this.gltfLoader.parse(
-        arrayBuffer,
-        '',
+        data,
+        '', // Base path for external resources (not used for embedded data)
         (gltf) => {
           const modelData = {
             model: gltf.scene,
@@ -29,6 +38,7 @@ export class ModelParsingService {
           resolve(modelData);
         },
         (error) => {
+          console.error('GLTF parsing error:', error);
           reject(error);
         }
       );

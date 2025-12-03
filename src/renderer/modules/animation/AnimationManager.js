@@ -321,7 +321,13 @@ export class AnimationManager {
    * @param {Array} newAnimations - Array of THREE.AnimationClip objects to add
    */
   addAnimations(newAnimations) {
-    return this.collectionService.addAnimations(newAnimations);
+    const totalCount = this.collectionService.addAnimations(newAnimations);
+    
+    // Refresh the animation list UI to show the newly added animations
+    this.populateAnimationList();
+    this.updateTimelineUI();
+    
+    return totalCount;
   }
   
   /**

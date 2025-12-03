@@ -22,6 +22,15 @@ export class TextureUIController {
   }
 
   /**
+   * Initialize event listeners for texture UI
+   */
+  initEventListeners() {
+    // Event listeners are set up dynamically when displayTextures is called
+    // This method exists to satisfy the UIManager interface
+    // Individual texture slot listeners are attached during DOM creation
+  }
+
+  /**
    * Display materials and textures in the texture panel
    */
   displayTextures() {

@@ -113,7 +113,7 @@ function getAnimationInfo(model) {
 describe('Smoke Tests - Model Loading', () => {
   describe('FBX Model Loading', () => {
     it('should load Mixamo idle animation', async () => {
-      const filepath = path.join(MODELS_PATH, 'Mixamo@Idle.fbx');
+      const filepath = path.join(MODELS_PATH, 'Mixamo/Mixamo@Idle.fbx');
       
       if (!fileExists(filepath)) {
         console.warn(`⚠️ File not found: ${filepath}`);
@@ -171,7 +171,7 @@ describe('Smoke Tests - Model Loading', () => {
     }, 10000);
 
     it('should load KayKit Mannequin Medium', async () => {
-      const filepath = path.join(MODELS_PATH, 'KayKit_Mannequin_Medium.fbx');
+      const filepath = path.join(MODELS_PATH, 'KayKit/KayKit_Mannequin_Medium.fbx');
       
       if (!fileExists(filepath)) {
         console.warn(`⚠️ File not found: ${filepath}`);
@@ -188,7 +188,7 @@ describe('Smoke Tests - Model Loading', () => {
     }, 10000);
 
     it('should load Quaternius Unity model', async () => {
-      const filepath = path.join(MODELS_PATH, 'Quaternius_Unity.fbx');
+      const filepath = path.join(MODELS_PATH, 'Quaternius/Quaternius_Unity.fbx');
       
       if (!fileExists(filepath)) {
         console.warn(`⚠️ File not found: ${filepath}`);
@@ -258,7 +258,7 @@ describe('Smoke Tests - Model Loading', () => {
 
   describe('Animation Library Loading', () => {
     it('should load standard animation library', async () => {
-      const filepath = path.join(MODELS_PATH, '_Animations/AnimationLibrary_Standard.fbx');
+      const filepath = path.join(MODELS_PATH, 'Quaternius/AnimationLibrary_Standard.fbx');
       
       if (!fileExists(filepath)) {
         console.warn(`⚠️ File not found: ${filepath}`);
@@ -276,7 +276,7 @@ describe('Smoke Tests - Model Loading', () => {
     }, 10000);
 
     it('should load Unity animation library', async () => {
-      const filepath = path.join(MODELS_PATH, '_Animations/AnimationLibrary_Unity_Standard.fbx');
+      const filepath = path.join(MODELS_PATH, 'Quaternius/AnimationLibrary_Unity_Standard.fbx');
       
       if (!fileExists(filepath)) {
         console.warn(`⚠️ File not found: ${filepath}`);
@@ -300,7 +300,7 @@ describe('Smoke Tests - Model Loading', () => {
 
   describe('Bone Naming Convention Detection', () => {
     it('should detect Mixamo bone naming (mixamorig: prefix)', async () => {
-      const filepath = path.join(MODELS_PATH, 'Mixamo@Idle.fbx');
+      const filepath = path.join(MODELS_PATH, 'Mixamo/Mixamo@Idle.fbx');
       
       if (!fileExists(filepath)) {
         console.warn(`⚠️ File not found: ${filepath}`);
@@ -348,9 +348,9 @@ describe('Smoke Tests - Model Loading', () => {
   describe('Model Compatibility Matrix', () => {
     it('should verify all test models have compatible structures', async () => {
       const testModels = [
-        'Mixamo@Idle.fbx',
+        'Mixamo/Mixamo@Idle.fbx',
         'Mannequin_UE5/Mannequin_UE5.FBX',
-        'Quaternius_Unity.fbx'
+        'Quaternius/Quaternius_Unity.fbx'
       ];
 
       const results = [];

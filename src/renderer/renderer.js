@@ -112,9 +112,28 @@ viewportContainer.addEventListener('drop', async (e) => {
 
   const reader = new FileReader();
   reader.onload = async (event) => {
-    const arrayBuffer = event.target.result;
-    const modelData = await modelLoader.loadFromBuffer(arrayBuffer, extension, file.name);
+    let data = event.target.result;
     
+    // For GLTF files (JSON-based), convert to string
+    // For GLB and FBX (binary), keep as ArrayBuffer
+    if (extension === 'gltf') {
+      // GLTF is a JSON file, so we need to read it as text
+      const textReader = new FileReader();
+      textReader.onload = async (textEvent) => {
+        const gltfText = textEvent.target.result;
+        const modelData = await modelLoader.loadFromBuffer(gltfText, extension, file.name);
+        await handleModelLoaded(modelData);
+      };
+      textReader.readAsText(file);
+      return;
+    }
+    
+    const modelData = await modelLoader.loadFromBuffer(data, extension, file.name);
+    await handleModelLoaded(modelData);
+  };
+  
+  // Extracted function to handle model loading completion
+  async function handleModelLoaded(modelData) {
     // Load animations
     if (modelData && modelData.animations && modelData.animations.length > 0) {
       animationManager.loadAnimations(modelData.animations);
@@ -142,7 +161,8 @@ viewportContainer.addEventListener('drop', async (e) => {
     
     // Enable save project button
     document.getElementById('btn-save-project').disabled = false;
-  };
+  }
+  
   reader.readAsArrayBuffer(file);
 });
 

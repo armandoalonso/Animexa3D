@@ -53,13 +53,24 @@ export class AnimationPlaybackService {
   }
 
   /**
-   * Initialize playback state for a new animation
+   * Initialize playback with an animation action
    * @param {number} index - Animation index
    * @param {THREE.AnimationAction} action - Animation action
    */
   initializePlayback(index, action) {
+    // Stop previous action if any
+    if (this.currentAction) {
+      this.currentAction.stop();
+    }
+    
     this.currentAnimationIndex = index;
     this.currentAction = action;
+    
+    // Configure and start the action
+    action.setLoop(this.loopEnabled ? THREE.LoopRepeat : THREE.LoopOnce);
+    action.clampWhenFinished = true;
+    action.reset().play();
+    
     this.isPlaying = true;
   }
 
