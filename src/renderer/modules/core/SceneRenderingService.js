@@ -197,11 +197,11 @@ export class SceneRenderingService {
 
   /**
    * Start render loop
-   * @param {Object} renderConfig - Configuration object with renderer, scene, camera, mixer, controls
+   * @param {Object} renderConfig - Configuration object with renderer, scene, camera, getMixer, controls
    * @returns {Function} Function to stop the render loop
    */
   static startRenderLoop(renderConfig) {
-    const { renderer, scene, camera, mixer, controls, clock } = renderConfig;
+    const { renderer, scene, camera, getMixer, controls, clock } = renderConfig;
 
     if (!renderer || !scene || !camera) {
       throw new Error('Renderer, scene, and camera are required');
@@ -214,6 +214,8 @@ export class SceneRenderingService {
 
       const delta = clock ? clock.getDelta() : 0;
 
+      // Get mixer dynamically to support runtime updates
+      const mixer = getMixer ? getMixer() : null;
       if (mixer) {
         mixer.update(delta);
       }

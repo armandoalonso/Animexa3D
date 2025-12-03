@@ -86,7 +86,7 @@ export class SceneManager {
       renderer: this.renderer,
       scene: this.scene,
       camera: this.camera,
-      mixer: this.mixer,
+      getMixer: () => this.mixer, // Pass getter function to access current mixer
       controls: this.controls,
       clock: this.clock
     });

@@ -361,6 +361,99 @@ describe('SceneRenderingService', () => {
       }).toThrow('Renderer, scene, and camera are required');
     });
 
+    it('should call getMixer function dynamically on each frame', () => {
+      const renderer = { render: vi.fn() };
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera();
+      const clock = { getDelta: vi.fn(() => 0.016) };
+      const controls = { update: vi.fn() };
+      
+      const mockMixer = { update: vi.fn() };
+      const getMixer = vi.fn(() => mockMixer);
+
+      const stop = SceneRenderingService.startRenderLoop({
+        renderer,
+        scene,
+        camera,
+        getMixer,
+        controls,
+        clock
+      });
+
+      // Wait for a few animation frames
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          stop();
+          
+          // Verify getMixer was called multiple times (dynamic access)
+          expect(getMixer.mock.calls.length).toBeGreaterThan(0);
+          expect(mockMixer.update).toHaveBeenCalled();
+          
+          resolve();
+        }, 50);
+      });
+    });
+
+    it('should handle mixer being null initially then set later', () => {
+      const renderer = { render: vi.fn() };
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera();
+      const clock = { getDelta: vi.fn(() => 0.016) };
+      
+      let currentMixer = null;
+      const mockMixer = { update: vi.fn() };
+      const getMixer = vi.fn(() => currentMixer);
+
+      const stop = SceneRenderingService.startRenderLoop({
+        renderer,
+        scene,
+        camera,
+        getMixer,
+        clock
+      });
+
+      // Initially mixer is null, then set after some frames
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          // Set mixer after render loop has started
+          currentMixer = mockMixer;
+          
+          setTimeout(() => {
+            stop();
+            
+            // Verify mixer.update was called after mixer was set
+            expect(mockMixer.update).toHaveBeenCalled();
+            expect(getMixer).toHaveBeenCalled();
+            
+            resolve();
+          }, 50);
+        }, 20);
+      });
+    });
+
+    it('should handle missing getMixer gracefully', () => {
+      const renderer = { render: vi.fn() };
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera();
+      const clock = { getDelta: vi.fn(() => 0.016) };
+
+      const stop = SceneRenderingService.startRenderLoop({
+        renderer,
+        scene,
+        camera,
+        clock
+      });
+
+      // Should not throw error when getMixer is not provided
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          stop();
+          expect(renderer.render).toHaveBeenCalled();
+          resolve();
+        }, 50);
+      });
+    });
+
     it.skip('should return stop function (requires WebGL)', () => {
       // This test requires a browser environment with WebGL support
       // Skipped in headless test environment
