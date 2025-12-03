@@ -12,11 +12,13 @@ export class RetargetingUIController {
    * @param {Object} dependencies - Required managers and services
    * @param {RetargetManager} dependencies.retargetManager - Animation retargeting manager
    * @param {AnimationManager} dependencies.animationManager - Animation playback manager
+   * @param {ModelLoader} dependencies.modelLoader - Model loader for getting current model
    * @param {Function} dependencies.showNotification - Notification callback
    */
-  constructor({ retargetManager, animationManager, showNotification }) {
+  constructor({ retargetManager, animationManager, modelLoader, showNotification }) {
     this.retargetManager = retargetManager;
     this.animationManager = animationManager;
+    this.modelLoader = modelLoader;
     this.showNotification = showNotification;
   }
 
@@ -108,9 +110,9 @@ export class RetargetingUIController {
    * Open retarget modal and initialize with target model
    */
   handleOpenRetargetModal() {
-    const currentModel = this.retargetManager.getTargetModelData();
+    const currentModel = this.modelLoader.getCurrentModelData();
     
-    if (!currentModel) {
+    if (!currentModel || !currentModel.model) {
       this.showNotification('Please load a model first', 'warning');
       return;
     }
@@ -118,28 +120,34 @@ export class RetargetingUIController {
     // Set target model
     this.retargetManager.setTargetModel(currentModel);
 
-    // Setup drop zone for source model
+    // Show modal first so DOM elements are available
+    document.getElementById('retarget-modal').classList.add('is-active');
+
+    // Setup drop zone for source model (after modal is shown)
     this.setupRetargetDropZone();
 
     // Update UI
     this.updateRetargetingUI();
-
-    // Show modal
-    document.getElementById('retarget-modal').classList.add('is-active');
   }
 
   /**
    * Setup drag-and-drop zone for source model files
    */
   setupRetargetDropZone() {
-    const dropZone = document.getElementById('source-model-drop-zone');
-    const dropOverlay = document.querySelector('.source-model-drop-overlay');
+    const dropZone = document.getElementById('retarget-drop-zone');
+    const dropOverlay = document.getElementById('retarget-drop-overlay');
+    
+    // Check if elements exist
+    if (!dropZone) {
+      console.warn('retarget-drop-zone element not found in DOM');
+      return;
+    }
     
     // Remove previous listeners by replacing the element
     const newDropZone = dropZone.cloneNode(true);
     dropZone.parentNode.replaceChild(newDropZone, dropZone);
     
-    const newDropOverlay = newDropZone.querySelector('.source-model-drop-overlay');
+    const newDropOverlay = newDropZone.querySelector('#retarget-drop-overlay');
     
     let dragCounter = 0;
     
@@ -148,7 +156,7 @@ export class RetargetingUIController {
       dragCounter++;
       if (dragCounter === 1) {
         newDropZone.classList.add('drag-over');
-        newDropOverlay.classList.add('active');
+        if (newDropOverlay) newDropOverlay.classList.add('active');
       }
     });
     
@@ -161,7 +169,7 @@ export class RetargetingUIController {
       dragCounter--;
       if (dragCounter === 0) {
         newDropZone.classList.remove('drag-over');
-        newDropOverlay.classList.remove('active');
+        if (newDropOverlay) newDropOverlay.classList.remove('active');
       }
     });
     
@@ -169,7 +177,7 @@ export class RetargetingUIController {
       e.preventDefault();
       dragCounter = 0;
       newDropZone.classList.remove('drag-over');
-      newDropOverlay.classList.remove('active');
+      if (newDropOverlay) newDropOverlay.classList.remove('active');
       
       const files = Array.from(e.dataTransfer.files);
       if (files.length === 0) return;
@@ -193,25 +201,19 @@ export class RetargetingUIController {
     });
     
     // Also add click handler to browse for file
-    const browseButton = newDropZone.querySelector('.btn-browse-source-model');
+    const browseButton = newDropZone.querySelector('#btn-load-target-model');
     if (browseButton) {
       browseButton.addEventListener('click', async () => {
-        const result = await window.electronAPI.openFileDialog({
-          title: 'Select Source Model',
-          filters: [
-            { name: 'Model Files', extensions: ['fbx', 'gltf', 'glb'] }
-          ]
-        });
+        const result = await window.electronAPI.openModelDialog();
         
-        if (result && !result.canceled && result.filePaths.length > 0) {
-          const filePath = result.filePaths[0];
-          const fileName = filePath.split(/[\\/]/).pop();
-          const ext = fileName.substring(fileName.lastIndexOf('.') + 1);
-          
+        if (result && result.data) {
           try {
             this.showNotification('Loading source model...', 'info', 2000);
-            const buffer = await window.electronAPI.readFile(filePath);
-            await this.handleLoadTargetModel(buffer, ext, fileName);
+            // Convert array to Uint8Array then to ArrayBuffer
+            const uint8Array = new Uint8Array(result.data);
+            const arrayBuffer = uint8Array.buffer;
+            const ext = result.extension.replace('.', '');
+            await this.handleLoadTargetModel(arrayBuffer, ext, result.name);
           } catch (error) {
             console.error('Error loading selected source model:', error);
             this.showNotification('Failed to load source model: ' + error.message, 'danger');
@@ -226,9 +228,13 @@ export class RetargetingUIController {
    */
   async handleLoadTargetModel(arrayBuffer, format, filename) {
     try {
-      const sourceModelData = await this.retargetManager.loadSourceModel(arrayBuffer, format, filename);
+      // Load the source model using ModelLoader
+      const sourceModelData = await this.modelLoader.loadFromBufferSilent(arrayBuffer, format, filename);
       
       if (sourceModelData) {
+        // Set the source model in RetargetManager
+        this.retargetManager.setSourceModel(sourceModelData);
+        
         this.showNotification(`Loaded source model: ${filename}`, 'success');
         this.updateRetargetingUI();
       } else {
@@ -244,23 +250,42 @@ export class RetargetingUIController {
    * Update retargeting UI with current model information
    */
   updateRetargetingUI() {
-    const targetModel = this.retargetManager.targetModel;
-    const sourceModel = this.retargetManager.sourceModel;
+    const targetModelData = this.retargetManager.targetModel;
+    const sourceModelData = this.retargetManager.sourceModel;
+    const targetSkeletonInfo = this.retargetManager.targetSkeletonInfo;
+    const sourceSkeletonInfo = this.retargetManager.sourceSkeletonInfo;
+    
+    console.log('updateRetargetingUI called:', {
+      hasTargetModelData: !!targetModelData,
+      hasSourceModelData: !!sourceModelData,
+      hasTargetSkeletonInfo: !!targetSkeletonInfo,
+      hasSourceSkeletonInfo: !!sourceSkeletonInfo,
+      targetBoneCount: targetSkeletonInfo?.bones?.length,
+      sourceBoneCount: sourceSkeletonInfo?.bones?.length
+    });
     
     // Update target model info
-    if (targetModel) {
-      document.getElementById('target-model-name').textContent = targetModel.filename || 'Current Model';
-      document.getElementById('target-rig-type').textContent = targetModel.rigType || 'Unknown';
-      document.getElementById('target-bone-count').textContent = targetModel.boneNames?.length || 0;
+    if (targetModelData && targetSkeletonInfo) {
+      const targetNameEl = document.getElementById('target-model-name');
+      const targetRigEl = document.getElementById('target-rig-type');
+      const targetBoneCountEl = document.getElementById('target-bone-count');
+      
+      if (targetNameEl) targetNameEl.textContent = targetModelData.filename || targetModelData.name || 'Current Model';
+      if (targetRigEl) targetRigEl.textContent = this.retargetManager.boneMappingService.targetRigType || 'Unknown';
+      if (targetBoneCountEl) targetBoneCountEl.textContent = targetSkeletonInfo.boneNames?.length || 0;
       
       // Display target bone tree
       const targetTreeContainer = document.getElementById('source-bone-tree');
-      targetTreeContainer.innerHTML = this.retargetManager.generateBoneTreeHTML(targetModel.boneHierarchy, 'target');
+      if (targetTreeContainer) {
+        const treeHtml = this.retargetManager.buildBoneTree(targetSkeletonInfo, false);
+        console.log('Target bone tree HTML length:', treeHtml.length);
+        targetTreeContainer.innerHTML = treeHtml;
+      }
       
       // Populate target root bone dropdown
-      if (targetModel.boneNames && targetModel.boneNames.length > 0) {
+      if (targetSkeletonInfo.boneNames && targetSkeletonInfo.boneNames.length > 0) {
         const autoDetectedRoot = this.retargetManager.getEffectiveTargetRootBone();
-        this.populateRootBoneDropdown('target', targetModel.boneNames, autoDetectedRoot);
+        this.populateRootBoneDropdown('target', targetSkeletonInfo.boneNames, autoDetectedRoot);
       }
       
       // Add click handlers to target bones
@@ -268,36 +293,57 @@ export class RetargetingUIController {
     }
     
     // Update source model info
-    if (sourceModel) {
-      document.getElementById('source-model-name').textContent = sourceModel.filename || 'No Model';
-      document.getElementById('source-rig-type').textContent = sourceModel.rigType || 'Unknown';
-      document.getElementById('source-bone-count').textContent = sourceModel.boneNames?.length || 0;
+    if (sourceModelData && sourceSkeletonInfo) {
+      const sourceNameEl = document.getElementById('source-model-name');
+      const sourceRigEl = document.getElementById('source-rig-type');
+      const sourceBoneCountEl = document.getElementById('source-bone-count');
+      
+      console.log('Updating source model UI:', {
+        filename: sourceModelData.filename || sourceModelData.name,
+        rigType: this.retargetManager.boneMappingService.sourceRigType,
+        boneCount: sourceSkeletonInfo.boneNames?.length
+      });
+      
+      if (sourceNameEl) sourceNameEl.textContent = sourceModelData.filename || sourceModelData.name || 'Source Model';
+      if (sourceRigEl) sourceRigEl.textContent = this.retargetManager.boneMappingService.sourceRigType || 'Unknown';
+      if (sourceBoneCountEl) sourceBoneCountEl.textContent = sourceSkeletonInfo.boneNames?.length || 0;
       
       // Display source bone tree
       const sourceTreeContainer = document.getElementById('target-bone-tree');
-      sourceTreeContainer.innerHTML = this.retargetManager.generateBoneTreeHTML(sourceModel.boneHierarchy, 'source');
+      if (sourceTreeContainer) {
+        const treeHtml = this.retargetManager.buildBoneTree(sourceSkeletonInfo, true);
+        console.log('Source bone tree HTML length:', treeHtml.length);
+        sourceTreeContainer.innerHTML = treeHtml;
+      }
       
       // Populate source root bone dropdown
-      if (sourceModel.boneNames && sourceModel.boneNames.length > 0) {
+      if (sourceSkeletonInfo.boneNames && sourceSkeletonInfo.boneNames.length > 0) {
         const autoDetectedRoot = this.retargetManager.getEffectiveSourceRootBone();
-        this.populateRootBoneDropdown('source', sourceModel.boneNames, autoDetectedRoot);
+        this.populateRootBoneDropdown('source', sourceSkeletonInfo.boneNames, autoDetectedRoot);
       }
       
       // Add click handlers to source bones
       this.addBoneClickHandlers('source');
       
       // Update animation list
-      if (sourceModel.animations && sourceModel.animations.length > 0) {
-        this.updateRetargetAnimationList(sourceModel.animations);
+      if (sourceModelData.animations && sourceModelData.animations.length > 0) {
+        this.updateRetargetAnimationList(sourceModelData.animations);
       } else {
-        document.getElementById('retarget-animation-list').innerHTML = '<p class="has-text-grey">No animations available</p>';
+        const animListEl = document.getElementById('retarget-animation-list');
+        if (animListEl) animListEl.innerHTML = '<p class="has-text-grey">No animations available</p>';
       }
     } else {
-      document.getElementById('source-model-name').textContent = 'Drop or browse for source model...';
-      document.getElementById('source-rig-type').textContent = '—';
-      document.getElementById('source-bone-count').textContent = '—';
-      document.getElementById('target-bone-tree').innerHTML = '<p class="has-text-grey">No source model loaded</p>';
-      document.getElementById('retarget-animation-list').innerHTML = '<p class="has-text-grey">No animations available</p>';
+      const sourceNameEl = document.getElementById('source-model-name');
+      const sourceRigEl = document.getElementById('source-rig-type');
+      const sourceBoneCountEl = document.getElementById('source-bone-count');
+      const targetTreeEl = document.getElementById('target-bone-tree');
+      const animListEl = document.getElementById('retarget-animation-list');
+      
+      if (sourceNameEl) sourceNameEl.textContent = 'Drop or browse for source model...';
+      if (sourceRigEl) sourceRigEl.textContent = '—';
+      if (sourceBoneCountEl) sourceBoneCountEl.textContent = '—';
+      if (targetTreeEl) targetTreeEl.innerHTML = '<p class="has-text-grey">No source model loaded</p>';
+      if (animListEl) animListEl.innerHTML = '<p class="has-text-grey">No animations available</p>';
     }
   }
 

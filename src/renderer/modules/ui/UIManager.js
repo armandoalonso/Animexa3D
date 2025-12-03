@@ -58,7 +58,8 @@ export class UIManager {
     this.retargetingUIController = new RetargetingUIController({
       retargetManager,
       animationManager,
-      showNotification: (msg, type, duration) => this.notificationService.show(msg, type, duration)
+      modelLoader,
+      showNotification: (msg, type, duration) => this.notificationService.showNotification(msg, type, duration)
     });
     
     // Make UIManager globally accessible for other modules

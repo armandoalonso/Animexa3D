@@ -352,4 +352,78 @@ describe('RetargetManager', () => {
       expect(effectiveRoot).toBe('CustomRoot');
     });
   });
+
+  describe('getTargetModelData', () => {
+    it('should return target model and skeleton info', () => {
+      const mockModel = createMockModel(['Hips', 'Spine']);
+      const mockSkeletons = {
+        bones: [new THREE.Bone()],
+        boneNames: ['Hips', 'Spine']
+      };
+
+      retargetManager.setTargetModel({
+        model: mockModel,
+        skeletons: mockSkeletons
+      });
+
+      const data = retargetManager.getTargetModelData();
+
+      expect(data).toBeDefined();
+      expect(data.model).toBe(mockModel);
+      expect(data.skeletons).toBe(mockSkeletons);
+    });
+
+    it('should return null values when no target model is set', () => {
+      const data = retargetManager.getTargetModelData();
+
+      expect(data).toBeDefined();
+      expect(data.model).toBeNull();
+      expect(data.skeletons).toBeNull();
+    });
+  });
+
+  describe('setTargetModel with null skeleton', () => {
+    it('should handle null skeleton info gracefully', () => {
+      const mockModel = createMockModel(['Hips']);
+      
+      // Should not throw when skeletons are null
+      expect(() => {
+        retargetManager.setTargetModel({
+          model: mockModel,
+          skeletons: null
+        });
+      }).not.toThrow();
+
+      expect(retargetManager.targetModel).toBe(mockModel);
+      expect(retargetManager.targetSkeletonInfo).toBeNull();
+    });
+
+    it('should handle missing boneNames gracefully', () => {
+      const mockModel = createMockModel(['Hips']);
+      
+      // Should not throw when boneNames are missing
+      expect(() => {
+        retargetManager.setTargetModel({
+          model: mockModel,
+          skeletons: { bones: [] } // Missing boneNames
+        });
+      }).not.toThrow();
+    });
+
+    it('should set rig type when skeleton info is valid', () => {
+      const mockModel = createMockModel(['mixamorig:Hips', 'mixamorig:Spine']);
+      const bones = [new THREE.Bone()];
+      bones[0].name = 'mixamorig:Hips';
+
+      retargetManager.setTargetModel({
+        model: mockModel,
+        skeletons: {
+          bones: bones,
+          boneNames: ['mixamorig:Hips', 'mixamorig:Spine']
+        }
+      });
+
+      expect(retargetManager.boneMappingService.targetRigType).toBe('mixamo');
+    });
+  });
 });

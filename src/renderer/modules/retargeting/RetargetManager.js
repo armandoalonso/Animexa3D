@@ -46,6 +46,16 @@ export class RetargetManager {
     };
   }
 
+  /**
+   * Get target model data (for UI controllers)
+   */
+  getTargetModelData() {
+    return {
+      model: this.targetModel ? this.targetModel.model || this.targetModel : null,
+      skeletons: this.targetSkeletonInfo
+    };
+  }
+
   // ============================================================================
   // DELEGATION METHODS - Forward calls to appropriate services
   // ============================================================================
@@ -140,7 +150,46 @@ export class RetargetManager {
    */
   setSourceModel(modelData) {
     this.sourceModel = modelData;
-    this.sourceSkeletonInfo = modelData.skeletons || this.skeletonAnalyzer.extractSkeletonInfo(modelData.model || modelData);
+    
+    // Extract skeleton info - prefer provided skeletons if they have bones
+    if (modelData.skeletons && modelData.skeletons.bones && modelData.skeletons.bones.length > 0) {
+      this.sourceSkeletonInfo = modelData.skeletons;
+      console.log('Using provided skeleton info for source model');
+    } else {
+      console.log('Extracting skeleton info from source model');
+      const modelObject = modelData.model || modelData;
+      this.sourceSkeletonInfo = this.skeletonAnalyzer.extractSkeletonInfo(modelObject);
+    }
+    
+    console.log('Source skeleton info:', {
+      hasBones: !!this.sourceSkeletonInfo.bones,
+      boneCount: this.sourceSkeletonInfo.bones?.length || 0,
+      hasBoneNames: !!this.sourceSkeletonInfo.boneNames,
+      boneNameCount: this.sourceSkeletonInfo.boneNames?.length || 0
+    });
+    
+    // Extract bone names from animation tracks if no skeleton mesh exists
+    if ((!this.sourceSkeletonInfo.bones || this.sourceSkeletonInfo.bones.length === 0) && 
+        (!this.sourceSkeletonInfo.boneNames || this.sourceSkeletonInfo.boneNames.length === 0) &&
+        modelData.animations && modelData.animations.length > 0) {
+      console.log('No skeleton mesh found, extracting bones from animation tracks');
+      const boneNamesSet = new Set();
+      for (const animation of modelData.animations) {
+        for (const track of animation.tracks) {
+          // Track names are in format "BoneName.position" or "BoneName.quaternion"
+          const boneName = track.name.split('.')[0];
+          boneNamesSet.add(boneName);
+        }
+      }
+      const boneNames = Array.from(boneNamesSet);
+      console.log(`Extracted ${boneNames.length} bone names from animation tracks:`, boneNames.slice(0, 5));
+      this.sourceSkeletonInfo = { 
+        bones: [], 
+        boneNames: boneNames, 
+        skeleton: null,
+        fromAnimationTracks: true // Flag to indicate this came from animation data
+      };
+    }
     
     const sourceRigType = this.boneMappingService.detectRigType(this.sourceSkeletonInfo.boneNames);
     this.boneMappingService.sourceRigType = sourceRigType;
@@ -153,7 +202,7 @@ export class RetargetManager {
     console.log('Source model set:', {
       filename: modelData.filename || 'unknown',
       rigType: sourceRigType,
-      boneCount: this.sourceSkeletonInfo.bones.length,
+      boneCount: this.sourceSkeletonInfo.bones?.length || 0,
       animationCount: modelData.animations?.length || 0,
       rootBone: this.sourceRootBone
     });
@@ -163,8 +212,13 @@ export class RetargetManager {
    * Set target model for retargeting
    */
   setTargetModel(modelData) {
-    this.targetModel = modelData.model;
+    this.targetModel = modelData;
     this.targetSkeletonInfo = modelData.skeletons;
+    
+    if (!this.targetSkeletonInfo || !this.targetSkeletonInfo.boneNames) {
+      console.warn('Target skeleton info is missing or invalid in setTargetModel:', this.targetSkeletonInfo);
+      return;
+    }
     
     const targetRigType = this.boneMappingService.detectRigType(this.targetSkeletonInfo.boneNames);
     this.boneMappingService.targetRigType = targetRigType;
@@ -175,6 +229,7 @@ export class RetargetManager {
     }
     
     console.log('Target model set:', {
+      filename: modelData.filename || 'unknown',
       rigType: targetRigType,
       boneCount: this.targetSkeletonInfo.bones.length,
       rootBone: this.targetRootBone
@@ -195,7 +250,8 @@ export class RetargetManager {
    */
   getTargetSkeleton() {
     if (!this.targetModel) return null;
-    return this.skeletonAnalyzer.getSkeletonFromModel(this.targetModel, this.targetSkeletonInfo);
+    const modelObject = this.targetModel.model || this.targetModel;
+    return this.skeletonAnalyzer.getSkeletonFromModel(modelObject, this.targetSkeletonInfo);
   }
 
   /**
