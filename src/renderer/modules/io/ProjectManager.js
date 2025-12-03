@@ -162,19 +162,12 @@ export class ProjectManager {
     const modelBuffer = await this.ioService.readFileAsBuffer(modelPath);
     const extension = projectData.model.extension;
     
-    // Load model data but don't add to scene yet
-    let modelData;
-    if (extension === 'glb' || extension === 'gltf') {
-      modelData = await this.modelLoader.loadGLTF(modelBuffer);
-    } else if (extension === 'fbx') {
-      modelData = await this.modelLoader.loadFBX(modelBuffer);
-    } else {
-      throw new Error(`Unsupported file format: ${extension}`);
-    }
-    
-    modelData.filename = projectData.model.fileName;
-    modelData.name = projectData.model.fileName;
-    modelData.bufferData = modelBuffer;
+    // Load model data without UI updates (silent mode)
+    const modelData = await this.modelLoader.loadFromBufferSilent(
+      modelBuffer,
+      extension,
+      projectData.model.fileName
+    );
     
     return modelData;
   }

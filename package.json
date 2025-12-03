@@ -58,6 +58,7 @@
     "adm-zip": "^0.5.16",
     "bulma": "^0.9.4",
     "electron": "^39.2.4",
+    "jszip": "^3.10.1",
     "three": "^0.160.0"
   },
   "devDependencies": {

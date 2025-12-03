@@ -170,6 +170,59 @@ export class ModelLoader {
   }
   
   /**
+   * Load model from array buffer without UI updates (for internal use)
+   * @param {ArrayBuffer} arrayBuffer - File buffer
+   * @param {string} extension - File extension
+   * @param {string} filename - Original filename
+   * @returns {Promise<Object>} - Model data with metadata
+   */
+  async loadFromBufferSilent(arrayBuffer, extension, filename) {
+    try {
+      // Validate extension
+      const normalizedExtension = this.parsingService.validateExtension(extension);
+      
+      // Parse model file
+      let modelData;
+      if (normalizedExtension === 'glb' || normalizedExtension === 'gltf') {
+        modelData = await this.parsingService.parseGLTF(arrayBuffer);
+      } else if (normalizedExtension === 'fbx') {
+        modelData = await this.parsingService.parseFBX(arrayBuffer);
+      }
+      
+      // Apply coordinate system conversion
+      const conversion = this.coordinateDetector.convertToCanonicalSpace(modelData.model);
+      
+      // Extract skeleton information
+      const skeletons = this.parsingService.extractSkeletons(modelData.model);
+      
+      // Analyze model structure
+      const stats = this.analysisService.analyzeModelStructure(
+        modelData.model,
+        modelData.animations,
+        skeletons
+      );
+      
+      // Prepare complete model data
+      const completeModelData = {
+        model: modelData.model,
+        animations: modelData.animations,
+        skeletons: skeletons,
+        coordinateConversion: conversion,
+        filename: filename,
+        name: filename,
+        bufferData: arrayBuffer,
+        stats: stats
+      };
+      
+      return completeModelData;
+      
+    } catch (error) {
+      console.error('Error loading model:', error);
+      throw error;
+    }
+  }
+  
+  /**
    * Verify if two bone structures are compatible
    * @param {Object} sourceSkeletons - Source skeleton data
    * @param {Object} targetSkeletons - Target skeleton data

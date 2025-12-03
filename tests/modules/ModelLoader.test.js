@@ -351,4 +351,231 @@ describe('ModelLoader', () => {
       expect(document.getElementById('model-info').style.display).toBe('none');
     });
   });
+
+  describe('loadFromBufferSilent', () => {
+    it('should load FBX model without UI updates', async () => {
+      // Arrange
+      const mockArrayBuffer = new ArrayBuffer(100);
+      const mockModel = new THREE.Object3D();
+      mockModel.name = 'TestModel';
+      
+      const mockParsedData = {
+        model: mockModel,
+        animations: []
+      };
+
+      vi.spyOn(modelLoader.parsingService, 'validateExtension').mockReturnValue('fbx');
+      vi.spyOn(modelLoader.parsingService, 'parseFBX').mockResolvedValue(mockParsedData);
+      vi.spyOn(modelLoader.parsingService, 'extractSkeletons').mockReturnValue({
+        skeletons: [],
+        bones: [],
+        boneNames: []
+      });
+      vi.spyOn(modelLoader.coordinateDetector, 'convertToCanonicalSpace').mockReturnValue({
+        applied: false
+      });
+      vi.spyOn(modelLoader.analysisService, 'analyzeModelStructure').mockReturnValue({
+        polygons: 100,
+        animations: 0,
+        bones: 0,
+        hasAnimations: false
+      });
+
+      // Act
+      const result = await modelLoader.loadFromBufferSilent(mockArrayBuffer, 'fbx', 'test.fbx');
+
+      // Assert
+      expect(modelLoader.parsingService.parseFBX).toHaveBeenCalledWith(mockArrayBuffer);
+      expect(result.model).toBe(mockModel);
+      expect(result.filename).toBe('test.fbx');
+      expect(result.name).toBe('test.fbx');
+      expect(result.bufferData).toBe(mockArrayBuffer);
+      
+      // Should NOT update UI or add to scene
+      expect(sceneManager.addModel).not.toHaveBeenCalled();
+      expect(sceneManager.createMixer).not.toHaveBeenCalled();
+      
+      // Should NOT update currentModelData
+      expect(modelLoader.currentModelData).toBeNull();
+    });
+
+    it('should load GLTF model without UI updates', async () => {
+      // Arrange
+      const mockArrayBuffer = new ArrayBuffer(100);
+      const mockModel = new THREE.Object3D();
+      mockModel.name = 'TestModel';
+      
+      const mockParsedData = {
+        model: mockModel,
+        animations: []
+      };
+
+      vi.spyOn(modelLoader.parsingService, 'validateExtension').mockReturnValue('glb');
+      vi.spyOn(modelLoader.parsingService, 'parseGLTF').mockResolvedValue(mockParsedData);
+      vi.spyOn(modelLoader.parsingService, 'extractSkeletons').mockReturnValue({
+        skeletons: [],
+        bones: [],
+        boneNames: []
+      });
+      vi.spyOn(modelLoader.coordinateDetector, 'convertToCanonicalSpace').mockReturnValue({
+        applied: false
+      });
+      vi.spyOn(modelLoader.analysisService, 'analyzeModelStructure').mockReturnValue({
+        polygons: 100,
+        animations: 0,
+        bones: 0,
+        hasAnimations: false
+      });
+
+      // Act
+      const result = await modelLoader.loadFromBufferSilent(mockArrayBuffer, 'glb', 'test.glb');
+
+      // Assert
+      expect(modelLoader.parsingService.parseGLTF).toHaveBeenCalledWith(mockArrayBuffer);
+      expect(result.model).toBe(mockModel);
+      expect(result.filename).toBe('test.glb');
+      
+      // Should NOT update UI or add to scene
+      expect(sceneManager.addModel).not.toHaveBeenCalled();
+    });
+
+    it('should load GLTF extension model without UI updates', async () => {
+      // Arrange
+      const mockArrayBuffer = new ArrayBuffer(100);
+      const mockModel = new THREE.Object3D();
+      
+      const mockParsedData = {
+        model: mockModel,
+        animations: []
+      };
+
+      vi.spyOn(modelLoader.parsingService, 'validateExtension').mockReturnValue('gltf');
+      vi.spyOn(modelLoader.parsingService, 'parseGLTF').mockResolvedValue(mockParsedData);
+      vi.spyOn(modelLoader.parsingService, 'extractSkeletons').mockReturnValue({
+        skeletons: [],
+        bones: [],
+        boneNames: []
+      });
+      vi.spyOn(modelLoader.coordinateDetector, 'convertToCanonicalSpace').mockReturnValue({
+        applied: false
+      });
+      vi.spyOn(modelLoader.analysisService, 'analyzeModelStructure').mockReturnValue({
+        polygons: 100,
+        animations: 0,
+        bones: 0,
+        hasAnimations: false
+      });
+
+      // Act
+      const result = await modelLoader.loadFromBufferSilent(mockArrayBuffer, 'gltf', 'test.gltf');
+
+      // Assert
+      expect(modelLoader.parsingService.parseGLTF).toHaveBeenCalledWith(mockArrayBuffer);
+      expect(result.filename).toBe('test.gltf');
+    });
+
+    it('should throw error for unsupported format', async () => {
+      // Arrange
+      const mockArrayBuffer = new ArrayBuffer(100);
+      
+      vi.spyOn(modelLoader.parsingService, 'validateExtension').mockImplementation(() => {
+        throw new Error('Unsupported file format: obj. Supported formats: glb, gltf, fbx');
+      });
+
+      // Act & Assert
+      await expect(
+        modelLoader.loadFromBufferSilent(mockArrayBuffer, 'obj', 'test.obj')
+      ).rejects.toThrow('Unsupported file format');
+    });
+
+    it('should include coordinate conversion data', async () => {
+      // Arrange
+      const mockArrayBuffer = new ArrayBuffer(100);
+      const mockModel = new THREE.Object3D();
+      
+      const mockParsedData = {
+        model: mockModel,
+        animations: []
+      };
+
+      const mockConversion = {
+        applied: true,
+        type: 'Y_UP_TO_Z_UP'
+      };
+
+      vi.spyOn(modelLoader.parsingService, 'validateExtension').mockReturnValue('fbx');
+      vi.spyOn(modelLoader.parsingService, 'parseFBX').mockResolvedValue(mockParsedData);
+      vi.spyOn(modelLoader.parsingService, 'extractSkeletons').mockReturnValue({
+        skeletons: [],
+        bones: [],
+        boneNames: []
+      });
+      vi.spyOn(modelLoader.coordinateDetector, 'convertToCanonicalSpace').mockReturnValue(mockConversion);
+      vi.spyOn(modelLoader.analysisService, 'analyzeModelStructure').mockReturnValue({
+        polygons: 100,
+        animations: 0,
+        bones: 0,
+        hasAnimations: false
+      });
+
+      // Act
+      const result = await modelLoader.loadFromBufferSilent(mockArrayBuffer, 'fbx', 'test.fbx');
+
+      // Assert
+      expect(result.coordinateConversion).toEqual(mockConversion);
+    });
+
+    it('should include skeleton and stats data', async () => {
+      // Arrange
+      const mockArrayBuffer = new ArrayBuffer(100);
+      const mockModel = new THREE.Object3D();
+      
+      const mockParsedData = {
+        model: mockModel,
+        animations: []
+      };
+
+      const mockSkeletons = {
+        skeletons: [],
+        bones: [{}, {}, {}],
+        boneNames: ['Bone1', 'Bone2', 'Bone3']
+      };
+
+      const mockStats = {
+        polygons: 500,
+        animations: 2,
+        bones: 3,
+        hasAnimations: true
+      };
+
+      vi.spyOn(modelLoader.parsingService, 'validateExtension').mockReturnValue('fbx');
+      vi.spyOn(modelLoader.parsingService, 'parseFBX').mockResolvedValue(mockParsedData);
+      vi.spyOn(modelLoader.parsingService, 'extractSkeletons').mockReturnValue(mockSkeletons);
+      vi.spyOn(modelLoader.coordinateDetector, 'convertToCanonicalSpace').mockReturnValue({
+        applied: false
+      });
+      vi.spyOn(modelLoader.analysisService, 'analyzeModelStructure').mockReturnValue(mockStats);
+
+      // Act
+      const result = await modelLoader.loadFromBufferSilent(mockArrayBuffer, 'fbx', 'test.fbx');
+
+      // Assert
+      expect(result.skeletons).toEqual(mockSkeletons);
+      expect(result.stats).toEqual(mockStats);
+    });
+
+    it('should propagate parsing errors', async () => {
+      // Arrange
+      const mockArrayBuffer = new ArrayBuffer(100);
+      const expectedError = new Error('Failed to parse FBX file');
+
+      vi.spyOn(modelLoader.parsingService, 'validateExtension').mockReturnValue('fbx');
+      vi.spyOn(modelLoader.parsingService, 'parseFBX').mockRejectedValue(expectedError);
+
+      // Act & Assert
+      await expect(
+        modelLoader.loadFromBufferSilent(mockArrayBuffer, 'fbx', 'test.fbx')
+      ).rejects.toThrow('Failed to parse FBX file');
+    });
+  });
 });
