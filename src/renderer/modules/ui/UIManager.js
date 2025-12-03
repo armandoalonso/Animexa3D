@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 import { NotificationService } from '../services/NotificationService.js';
+import { FileOperationsUIController } from './controllers/FileOperationsUIController.js';
+import { AnimationUIController } from './controllers/AnimationUIController.js';
+import { ExportUIController } from './controllers/ExportUIController.js';
+import { SceneControlsUIController } from './controllers/SceneControlsUIController.js';
+import { TextureUIController } from './controllers/TextureUIController.js';
+import { RetargetingUIController } from './controllers/RetargetingUIController.js';
 
 export class UIManager {
   constructor(sceneManager, modelLoader, animationManager, exportManager, retargetManager, textureManager, projectManager, cameraPresetManager) {
@@ -15,6 +21,46 @@ export class UIManager {
     // Initialize notification service
     this.notificationService = new NotificationService('#notification-container');
     
+    // Initialize UI controllers
+    this.fileOperationsController = new FileOperationsUIController({
+      modelLoader,
+      projectManager,
+      animationManager,
+      textureManager,
+      sceneManager,
+      notificationService: this.notificationService,
+      displayTextures: () => this.displayTextures(),
+      clearTextureDisplay: () => this.clearTextureDisplay()
+    });
+    
+    this.animationUIController = new AnimationUIController({
+      modelLoader,
+      animationManager,
+      notificationService: this.notificationService
+    });
+    
+    this.exportUIController = new ExportUIController({
+      exportManager,
+      notificationService: this.notificationService
+    });
+    
+    this.sceneControlsUIController = new SceneControlsUIController({
+      sceneManager,
+      cameraPresetManager,
+      notificationService: this.notificationService
+    });
+    
+    this.textureUIController = new TextureUIController({
+      textureManager,
+      notificationService: this.notificationService
+    });
+    
+    this.retargetingUIController = new RetargetingUIController({
+      retargetManager,
+      animationManager,
+      showNotification: (msg, type, duration) => this.notificationService.show(msg, type, duration)
+    });
+    
     // Make UIManager globally accessible for other modules
     window.uiManager = this;
     
@@ -23,16 +69,15 @@ export class UIManager {
   }
   
   initEventListeners() {
-    // File operations
-    document.getElementById('btn-new-project').addEventListener('click', () => this.handleNewProject());
-    document.getElementById('btn-open-model').addEventListener('click', () => this.handleOpenModel());
-    document.getElementById('btn-save-project').addEventListener('click', () => this.handleSaveProject());
-    document.getElementById('btn-load-project').addEventListener('click', () => this.handleLoadProject());
-    document.getElementById('btn-export').addEventListener('click', () => this.handleOpenExportModal());
-    document.getElementById('btn-capture').addEventListener('click', () => this.handleCaptureFrame());
-    document.getElementById('btn-retarget').addEventListener('click', () => this.handleOpenRetargetModal());
+    // Initialize controller event listeners
+    this.fileOperationsController.initEventListeners();
+    this.animationUIController.initEventListeners();
+    this.exportUIController.initEventListeners();
+    this.sceneControlsUIController.initEventListeners();
+    this.textureUIController.initEventListeners();
+    this.retargetingUIController.initEventListeners();
     
-    // Export Model
+    // Export Model (not yet extracted)
     document.getElementById('btn-export-model').addEventListener('click', () => this.handleOpenExportModelModal());
     document.getElementById('btn-choose-export-model-folder').addEventListener('click', () => this.handleChooseExportModelFolder());
     document.getElementById('btn-start-model-export').addEventListener('click', () => this.handleStartModelExport());
@@ -46,24 +91,7 @@ export class UIManager {
       console.error('Add animation button NOT FOUND during initialization!');
     }
     
-    // Scene controls
-    document.getElementById('bg-color').addEventListener('input', (e) => this.handleBackgroundColor(e));
-    document.getElementById('camera-preset').addEventListener('change', (e) => this.handleCameraPreset(e));
-    document.getElementById('grid-toggle').addEventListener('change', (e) => this.handleGridToggle(e));
-    
-    // Custom camera preset controls
-    document.getElementById('btn-save-camera-view').addEventListener('click', () => this.handleSaveCameraView());
-    document.getElementById('custom-camera-preset').addEventListener('change', (e) => this.handleLoadCustomPreset(e));
-    document.getElementById('btn-delete-camera-preset').addEventListener('click', () => this.handleDeleteCameraPreset());
-    
-    // Light controls
-    document.getElementById('light-x').addEventListener('input', (e) => this.handleLightPosition());
-    document.getElementById('light-y').addEventListener('input', (e) => this.handleLightPosition());
-    document.getElementById('light-z').addEventListener('input', (e) => this.handleLightPosition());
-    document.getElementById('dir-light-intensity').addEventListener('input', (e) => this.handleDirectionalLightIntensity(e));
-    document.getElementById('amb-light-intensity').addEventListener('input', (e) => this.handleAmbientLightIntensity(e));
-    
-    // Animation controls
+    // Animation controls (direct manager integration)
     document.getElementById('btn-play').addEventListener('click', () => this.animationManager.togglePlayPause());
     document.getElementById('btn-pause').addEventListener('click', () => this.animationManager.pauseAnimation());
     document.getElementById('btn-stop').addEventListener('click', () => this.animationManager.stopAnimation());
@@ -73,6 +101,9 @@ export class UIManager {
     document.getElementById('time-slider').addEventListener('input', (e) => {
       this.animationManager.scrubTimeline(parseFloat(e.target.value));
     });
+    
+    // Rename animation modal
+    document.getElementById('btn-confirm-rename-animation').addEventListener('click', () => this.handleConfirmRenameAnimation());
     
     // Export modal
     document.getElementById('export-resolution').addEventListener('change', (e) => this.handleResolutionChange(e));
@@ -299,180 +330,22 @@ export class UIManager {
     }
   }
   
-  handleBackgroundColor(event) {
-    const color = event.target.value;
-    this.sceneManager.setBackgroundColor(color);
-  }
-  
-  handleCameraPreset(event) {
-    this.sceneManager.applyCameraPreset(event.target.value);
-  }
-  
-  handleGridToggle(event) {
-    this.sceneManager.toggleGrid(event.target.checked);
-  }
-  
-  handleLightPosition() {
-    const x = parseFloat(document.getElementById('light-x').value);
-    const y = parseFloat(document.getElementById('light-y').value);
-    const z = parseFloat(document.getElementById('light-z').value);
-    
-    document.getElementById('light-x-value').textContent = x;
-    document.getElementById('light-y-value').textContent = y;
-    document.getElementById('light-z-value').textContent = z;
-    
-    this.sceneManager.updateLightPosition(x, y, z);
-  }
-  
-  handleDirectionalLightIntensity(event) {
-    const value = parseFloat(event.target.value);
-    document.getElementById('dir-light-value').textContent = value;
-    this.sceneManager.updateDirectionalLightIntensity(value);
-  }
-  
-  handleAmbientLightIntensity(event) {
-    const value = parseFloat(event.target.value);
-    document.getElementById('amb-light-value').textContent = value;
-    this.sceneManager.updateAmbientLightIntensity(value);
-  }
-  
-  handleOpenExportModal() {
-    document.getElementById('export-modal').classList.add('is-active');
-  }
-  
-  handleResolutionChange(event) {
-    const customDiv = document.getElementById('custom-resolution');
-    if (event.target.value === 'custom') {
-      customDiv.style.display = 'block';
-    } else {
-      customDiv.style.display = 'none';
-    }
-    this.updateExportButton();
-  }
-  
-  handleFpsChange(event) {
-    const customDiv = document.getElementById('custom-fps');
-    if (event.target.value === 'custom') {
-      customDiv.style.display = 'block';
-    } else {
-      customDiv.style.display = 'none';
-    }
-  }
-  
-  async handleChooseExportFolder() {
-    const folder = await window.electronAPI.chooseExportFolder();
-    if (folder) {
-      document.getElementById('export-folder').value = folder;
-      this.exportManager.setExportFolder(folder);
-      this.updateExportButton();
-    }
-  }
-  
-  updateExportButton() {
-    const folder = document.getElementById('export-folder').value;
-    const resolution = document.getElementById('export-resolution').value;
-    const btn = document.getElementById('btn-start-export');
-    
-    btn.disabled = !folder || !resolution;
-  }
-  
-  async handleStartExport() {
-    const resolutionSelect = document.getElementById('export-resolution').value;
-    const fpsSelect = document.getElementById('export-fps').value;
-    const folder = this.exportManager.getExportFolder();
-    const transparentBackground = document.getElementById('transparent-bg-toggle').checked;
-    
-    if (!folder) {
-      this.showNotification('Please select an output folder', 'error');
-      return;
-    }
-    
-    let resolution;
-    if (resolutionSelect === 'custom') {
-      const size = parseInt(document.getElementById('export-size').value);
-      resolution = `${size}x${size}`;
-    } else {
-      resolution = resolutionSelect;
-    }
-    
-    let fps;
-    if (fpsSelect === 'custom') {
-      fps = parseInt(document.getElementById('export-fps-custom').value);
-    } else {
-      fps = parseInt(fpsSelect);
-    }
-    
-    // Close export settings modal
-    document.getElementById('export-modal').classList.remove('is-active');
-    
-    // Start export
-    await this.exportManager.startExport({ resolution, fps, folder, transparentBackground });
-  }
-  
-  handleCancelExport() {
-    this.exportManager.cancelCurrentExport();
-  }
-  
-  handleCaptureFrame() {
-    // Open the capture modal
-    document.getElementById('capture-modal').classList.add('is-active');
-    
-    // Pre-fill with export folder if it exists
-    const exportFolder = this.exportManager.getExportFolder();
-    if (exportFolder) {
-      document.getElementById('capture-folder').value = exportFolder;
-      document.getElementById('btn-do-capture').disabled = false;
-    }
-  }
-  
-  handleCaptureResolutionChange(event) {
-    const customDiv = document.getElementById('capture-custom-resolution');
-    if (event.target.value === 'custom') {
-      customDiv.style.display = 'block';
-    } else {
-      customDiv.style.display = 'none';
-    }
-  }
-  
-  async handleChooseCaptureFolder() {
-    const folder = await window.electronAPI.chooseExportFolder();
-    if (folder) {
-      document.getElementById('capture-folder').value = folder;
-      document.getElementById('btn-do-capture').disabled = false;
-    }
-  }
-  
-  async handleDoCapture() {
-    const resolutionSelect = document.getElementById('capture-resolution').value;
-    const folder = document.getElementById('capture-folder').value;
-    const transparentBackground = document.getElementById('capture-transparent-bg-toggle').checked;
-    
-    if (!folder) {
-      this.showNotification('Please select an output folder', 'warning');
-      return;
-    }
-    
-    let resolution;
-    if (resolutionSelect === 'custom') {
-      const size = parseInt(document.getElementById('capture-size').value);
-      resolution = `${size}x${size}`;
-    } else {
-      resolution = resolutionSelect;
-    }
-    
-    // Close the modal
-    document.getElementById('capture-modal').classList.remove('is-active');
-    
-    try {
-      await this.exportManager.captureCurrentFrame({ resolution, folder, transparentBackground });
-      this.showNotification('Frame captured successfully!', 'success');
-    } catch (error) {
-      this.showNotification(`Failed to capture frame: ${error.message}`, 'error');
-    }
-  }
-  
   showNotification(message, type = 'info', duration = 5000) {
     return this.notificationService.showNotification(message, type, duration);
+  }
+  
+  // Proxy methods for FileOperationsController to access texture display
+  displayTextures() {
+    return this.textureUIController.displayTextures();
+  }
+  
+  clearTextureDisplay() {
+    return this.textureUIController.clearTextureDisplay();
+  }
+  
+  // Proxy method for refreshing camera presets (called from constructor)
+  refreshCustomCameraPresets() {
+    return this.sceneControlsUIController.refreshCustomCameraPresets();
   }
   
   // Retargeting Handlers
