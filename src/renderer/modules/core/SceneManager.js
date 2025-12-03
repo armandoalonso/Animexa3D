@@ -103,7 +103,13 @@ export class SceneManager {
    * Set background color using service
    */
   setBackgroundColor(color) {
-    SceneRenderingService.updateBackgroundColor(this.scene, color);
+    // Convert string hex (#RRGGBB) to numeric hex (0xRRGGBB) if needed
+    let numericColor = color;
+    if (typeof color === 'string') {
+      // Remove # if present and convert to number
+      numericColor = parseInt(color.replace('#', ''), 16);
+    }
+    SceneRenderingService.updateBackgroundColor(this.scene, numericColor);
   }
   
   /**

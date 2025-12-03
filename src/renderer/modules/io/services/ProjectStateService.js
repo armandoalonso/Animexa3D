@@ -132,14 +132,18 @@ export class ProjectStateService {
       sceneManager.createMixer(loadedModelData.model);
     }
 
-    // Update model info UI (this could be moved to adapter if needed)
-    const polyCount = modelLoader.countPolygons(loadedModelData.model);
-    const boneCount = modelLoader.countBones(loadedModelData.model);
-    modelLoader.updateModelInfo(
+    // Update model info UI using stats from loaded model data
+    const stats = loadedModelData.stats || {
+      polygons: 0,
+      animations: loadedModelData.animations?.length || 0,
+      bones: 0
+    };
+    
+    modelLoader.uiAdapter.updateModelInfo(
       data.name || data.fileName,
-      polyCount,
-      loadedModelData.animations.length,
-      boneCount
+      stats.polygons,
+      stats.animations,
+      stats.bones
     );
 
     // Store as current model data

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ProjectManager } from '../../src/renderer/modules/io/ProjectManager.js';
+import * as THREE from 'three';
 
 describe('ProjectManager', () => {
   let projectManager;
@@ -31,14 +32,23 @@ describe('ProjectManager', () => {
       getModel: vi.fn(),
       addModel: vi.fn(),
       clearScene: vi.fn(),
-      createMixer: vi.fn()
+      createMixer: vi.fn(),
+      setBackgroundColor: vi.fn(),
+      setCameraPosition: vi.fn(),
+      setCameraFOV: vi.fn(),
+      setAutoRotate: vi.fn(),
+      setExposure: vi.fn()
     };
 
     // Mock ModelLoader
     mockModelLoader = {
       loadFromBufferSilent: vi.fn(),
       getCurrentModelData: vi.fn(),
-      clearCurrentModel: vi.fn()
+      clearCurrentModel: vi.fn(),
+      uiAdapter: {
+        updateModelInfo: vi.fn(),
+        clearModelInfo: vi.fn()
+      }
     };
 
     // Mock AnimationManager
@@ -49,7 +59,8 @@ describe('ProjectManager', () => {
       getAnimations: vi.fn(() => []),
       clearAnimations: vi.fn(),
       addAnimation: vi.fn(),
-      playAnimation: vi.fn()
+      playAnimation: vi.fn(),
+      loadAnimations: vi.fn()
     };
 
     // Mock TextureManager
@@ -363,10 +374,17 @@ describe('ProjectManager', () => {
         }
       };
       const mockModelData = {
-        model: { name: 'TestModel' },
+        model: new THREE.Object3D(),
         animations: [],
-        skeletons: { bones: [], boneNames: [] }
+        skeletons: { bones: [], boneNames: [] },
+        stats: {
+          polygons: 1000,
+          animations: 0,
+          bones: 0,
+          hasAnimations: false
+        }
       };
+      mockModelData.model.name = 'TestModel';
 
       projectManager.ioService.showOpenDialog = vi.fn().mockResolvedValue(mockProjectPath);
       projectManager.ioService.loadProjectFromFile = vi.fn().mockResolvedValue({
@@ -376,6 +394,9 @@ describe('ProjectManager', () => {
       projectManager.ioService.readFileAsBuffer = vi.fn().mockResolvedValue(new ArrayBuffer(100));
       mockModelLoader.loadFromBufferSilent = vi.fn().mockResolvedValue(mockModelData);
       mockModelLoader.getCurrentModelData = vi.fn().mockReturnValue(mockModelData);
+      mockModelLoader.uiAdapter = {
+        updateModelInfo: vi.fn()
+      };
 
       // Act
       const result = await projectManager.loadProject();
@@ -384,6 +405,14 @@ describe('ProjectManager', () => {
       expect(result).toBe(true);
       expect(projectManager.ioService.loadProjectFromFile).toHaveBeenCalledWith(mockProjectPath);
       expect(mockModelLoader.loadFromBufferSilent).toHaveBeenCalled();
+      expect(mockModelLoader.uiAdapter.updateModelInfo).toHaveBeenCalledWith(
+        'test-model.fbx',
+        1000,
+        0,
+        0
+      );
+      // Verify setBackgroundColor was called with the hex string from project data
+      expect(mockSceneManager.setBackgroundColor).toHaveBeenCalledWith('#FFFFFF');
     });
 
     it('should return false when user cancels open dialog', async () => {
@@ -431,10 +460,17 @@ describe('ProjectManager', () => {
         }
       };
       const mockModelData = {
-        model: { name: 'TestModel' },
+        model: new THREE.Object3D(),
         animations: [],
-        skeletons: { bones: [], boneNames: [] }
+        skeletons: { bones: [], boneNames: [] },
+        stats: {
+          polygons: 1000,
+          animations: 0,
+          bones: 0,
+          hasAnimations: false
+        }
       };
+      mockModelData.model.name = 'TestModel';
 
       projectManager.ioService.loadProjectFromFile = vi.fn().mockResolvedValue({
         projectData: mockProjectData,
@@ -443,6 +479,9 @@ describe('ProjectManager', () => {
       projectManager.ioService.readFileAsBuffer = vi.fn().mockResolvedValue(new ArrayBuffer(100));
       mockModelLoader.loadFromBufferSilent = vi.fn().mockResolvedValue(mockModelData);
       mockModelLoader.getCurrentModelData = vi.fn().mockReturnValue(mockModelData);
+      mockModelLoader.uiAdapter = {
+        updateModelInfo: vi.fn()
+      };
 
       // Act
       const result = await projectManager.loadProject(mockProjectPath);
