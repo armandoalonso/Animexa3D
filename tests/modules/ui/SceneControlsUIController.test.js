@@ -218,7 +218,7 @@ describe('SceneControlsUIController', () => {
         controller.handleSaveCameraView();
 
         expect(elements['save-camera-preset-modal'].classList.add).toHaveBeenCalledWith('is-active');
-        expect(elements['camera-preset-name-input'].value).toBe('');
+        expect(elements['camera-preset-name-input'].value).toMatch(/^Custom View \d{2}$/);
       });
 
       it('should handle missing modal element gracefully', () => {
