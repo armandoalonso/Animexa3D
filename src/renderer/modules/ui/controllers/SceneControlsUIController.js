@@ -116,7 +116,11 @@ export class SceneControlsUIController {
       return;
     }
     
-    input.value = '';
+    // Count existing custom presets and set default name
+    const presets = this.cameraPresetManager.getAllPresets();
+    const nextNum = Object.keys(presets).length + 1;
+    const defaultName = `Custom View ${nextNum.toString().padStart(2, '0')}`;
+    input.value = defaultName;
     modal.classList.add('is-active');
     
     // Focus the input after a short delay
