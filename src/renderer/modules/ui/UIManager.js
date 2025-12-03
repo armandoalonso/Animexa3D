@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { NotificationService } from '../services/NotificationService.js';
 
 export class UIManager {
   constructor(sceneManager, modelLoader, animationManager, exportManager, retargetManager, textureManager, projectManager, cameraPresetManager) {
@@ -10,6 +11,9 @@ export class UIManager {
     this.textureManager = textureManager;
     this.projectManager = projectManager;
     this.cameraPresetManager = cameraPresetManager;
+    
+    // Initialize notification service
+    this.notificationService = new NotificationService('#notification-container');
     
     // Make UIManager globally accessible for other modules
     window.uiManager = this;
@@ -468,27 +472,7 @@ export class UIManager {
   }
   
   showNotification(message, type = 'info', duration = 5000) {
-    const container = document.getElementById('notification-container');
-    
-    const notification = document.createElement('div');
-    notification.className = `notification is-${type}`;
-    notification.innerHTML = `
-      <button class="delete"></button>
-      ${message}
-    `;
-    
-    const deleteBtn = notification.querySelector('.delete');
-    deleteBtn.addEventListener('click', () => {
-      notification.remove();
-    });
-    
-    container.appendChild(notification);
-    
-    // Auto-dismiss
-    setTimeout(() => {
-      notification.style.opacity = '0';
-      setTimeout(() => notification.remove(), 300);
-    }, duration);
+    return this.notificationService.showNotification(message, type, duration);
   }
   
   // Retargeting Handlers
