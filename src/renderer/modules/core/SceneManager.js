@@ -371,7 +371,7 @@ export class SceneManager {
   }
   
   /**
-   * Clear scene and dispose of resources
+   * Clear all objects from the scene
    */
   clearScene() {
     // Remove current model from scene
@@ -389,6 +389,10 @@ export class SceneManager {
     
     // Reset clock
     this.clock = new THREE.Clock();
+    
+    // Reset background color to default
+    const defaults = SceneStateService.getDefaultSettings();
+    this.setBackgroundColor(defaults.backgroundColor);
   }
   
   /**

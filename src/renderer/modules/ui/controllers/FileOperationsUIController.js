@@ -195,6 +195,12 @@ export class FileOperationsUIController {
       // Reset UI state
       this.disableProjectButtons();
       
+      // Show empty state overlay
+      const emptyState = document.getElementById('empty-state');
+      if (emptyState) {
+        emptyState.classList.remove('hidden');
+      }
+      
       // Reset animation list
       document.getElementById('animation-list').innerHTML = '<div class="empty-state"><p class="has-text-grey">No model loaded</p></div>';
       

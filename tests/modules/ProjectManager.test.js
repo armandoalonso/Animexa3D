@@ -14,7 +14,12 @@ describe('ProjectManager', () => {
     // Mock SceneManager
     mockSceneManager = {
       scene: {
-        background: { r: 1, g: 1, b: 1 },
+        background: {
+          r: 1,
+          g: 1,
+          b: 1,
+          getHexString: vi.fn(() => '2c3e50')
+        },
         fog: null
       },
       camera: {
@@ -23,11 +28,20 @@ describe('ProjectManager', () => {
       },
       controls: {
         autoRotate: false,
-        autoRotateSpeed: 2.0
+        autoRotateSpeed: 2.0,
+        target: { x: 0, y: 0, z: 0 }
       },
       renderer: {
         toneMappingExposure: 1.0
       },
+      ambientLight: {
+        intensity: 0.5
+      },
+      directionalLight: {
+        intensity: 0.8,
+        position: { x: 5, y: 10, z: 7.5 }
+      },
+      gridVisible: true,
       getActiveModel: vi.fn(),
       getModel: vi.fn(),
       addModel: vi.fn(),
@@ -295,16 +309,19 @@ describe('ProjectManager', () => {
       // Arrange
       const mockSavePath = 'C:\\projects\\test.3dproj';
       mockSceneManager.getActiveModel = vi.fn().mockReturnValue({ name: 'TestModel' });
-      mockSceneManager.getModel = vi.fn().mockReturnValue({ name: 'TestModel' });
+      mockSceneManager.getModel = vi.fn().mockReturnValue({
+        position: { x: 0, y: 0, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 }
+      });
       mockModelLoader.getCurrentModelData = vi.fn().mockReturnValue({
-        filename: 'test.fbx',
-        model: { name: 'TestModel' },
+        name: 'test.fbx',
+        path: 'C:\\models\\test.fbx',
         bufferData: new ArrayBuffer(100)
       });
       mockTextureManager.extractMaterials = vi.fn().mockReturnValue([]);
       
-      projectManager.ioService.showSaveDialog = vi.fn().mockResolvedValue(mockSavePath);
-      projectManager.ioService.saveProjectToFile = vi.fn().mockResolvedValue();
+      vi.spyOn(projectManager.ioService, 'showSaveDialog').mockResolvedValue(mockSavePath);
+      vi.spyOn(projectManager.ioService, 'saveProjectToFile').mockResolvedValue();
 
       // Act
       const result = await projectManager.saveProject();
@@ -317,13 +334,16 @@ describe('ProjectManager', () => {
 
     it('should return false when user cancels save dialog', async () => {
       // Arrange
-      mockSceneManager.getModel = vi.fn().mockReturnValue({ name: 'TestModel' });
+      mockSceneManager.getModel = vi.fn().mockReturnValue({
+        position: { x: 0, y: 0, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 }
+      });
       mockModelLoader.getCurrentModelData = vi.fn().mockReturnValue({
-        filename: 'test.fbx',
-        model: { name: 'TestModel' },
+        name: 'test.fbx',
+        path: 'C:\\models\\test.fbx',
         bufferData: new ArrayBuffer(100)
       });
-      projectManager.ioService.showSaveDialog = vi.fn().mockResolvedValue(null);
+      vi.spyOn(projectManager.ioService, 'showSaveDialog').mockResolvedValue(null);
 
       // Act
       const result = await projectManager.saveProject();
@@ -338,16 +358,19 @@ describe('ProjectManager', () => {
       const expectedError = new Error('Failed to write file');
       
       mockSceneManager.getActiveModel = vi.fn().mockReturnValue({ name: 'TestModel' });
-      mockSceneManager.getModel = vi.fn().mockReturnValue({ name: 'TestModel' });
+      mockSceneManager.getModel = vi.fn().mockReturnValue({
+        position: { x: 0, y: 0, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 }
+      });
       mockModelLoader.getCurrentModelData = vi.fn().mockReturnValue({
-        filename: 'test.fbx',
-        model: { name: 'TestModel' },
+        name: 'test.fbx',
+        path: 'C:\\models\\test.fbx',
         bufferData: new ArrayBuffer(100)
       });
       mockTextureManager.extractMaterials = vi.fn().mockReturnValue([]);
       
-      projectManager.ioService.showSaveDialog = vi.fn().mockResolvedValue(mockSavePath);
-      projectManager.ioService.saveProjectToFile = vi.fn().mockRejectedValue(expectedError);
+      vi.spyOn(projectManager.ioService, 'showSaveDialog').mockResolvedValue(mockSavePath);
+      vi.spyOn(projectManager.ioService, 'saveProjectToFile').mockRejectedValue(expectedError);
 
       // Act & Assert
       await expect(projectManager.saveProject()).rejects.toThrow('Failed to write file');
@@ -417,7 +440,7 @@ describe('ProjectManager', () => {
 
     it('should return false when user cancels open dialog', async () => {
       // Arrange
-      projectManager.ioService.showOpenDialog = vi.fn().mockResolvedValue(null);
+      vi.spyOn(projectManager.ioService, 'showOpenDialog').mockResolvedValue(null);
 
       // Act
       const result = await projectManager.loadProject();
@@ -472,7 +495,9 @@ describe('ProjectManager', () => {
       };
       mockModelData.model.name = 'TestModel';
 
-      projectManager.ioService.loadProjectFromFile = vi.fn().mockResolvedValue({
+      vi.spyOn(projectManager.ioService, 'showOpenDialog').mockResolvedValue(null);
+      vi.spyOn(projectManager.ioService, 'showOpenDialog').mockResolvedValue(null);
+      vi.spyOn(projectManager.ioService, 'loadProjectFromFile').mockResolvedValue({
         projectData: mockProjectData,
         extractedPath: mockExtractedPath
       });
