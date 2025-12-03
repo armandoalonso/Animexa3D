@@ -153,6 +153,40 @@ export class SceneManager {
     this.controls.target.set(preset.target.x, preset.target.y, preset.target.z);
     this.controls.update();
   }
+
+  /**
+   * Apply camera state (position and target)
+   * @param {Object} state - Camera state with position and target
+   */
+  applyCameraState(state) {
+    if (!state || !state.position || !state.target) {
+      console.error('Invalid camera state:', state);
+      return;
+    }
+
+    this.camera.position.set(state.position.x, state.position.y, state.position.z);
+    this.controls.target.set(state.target.x, state.target.y, state.target.z);
+    this.controls.update();
+  }
+
+  /**
+   * Get current camera state
+   * @returns {Object} Current camera position and target
+   */
+  getCurrentCameraState() {
+    return {
+      position: {
+        x: this.camera.position.x,
+        y: this.camera.position.y,
+        z: this.camera.position.z
+      },
+      target: {
+        x: this.controls.target.x,
+        y: this.controls.target.y,
+        z: this.controls.target.z
+      }
+    };
+  }
   
   /**
    * Clear model from scene using service

@@ -129,9 +129,6 @@ export class UIManager {
     document.getElementById('target-root-bone-select').addEventListener('change', (e) => this.handleTargetRootBoneChange(e));
     document.getElementById('source-root-bone-select').addEventListener('change', (e) => this.handleSourceRootBoneChange(e));
     
-    // Camera preset modal
-    document.getElementById('btn-confirm-save-camera-preset').addEventListener('click', () => this.handleConfirmSaveCameraPreset());
-    
     // Rename animation modal
     document.getElementById('btn-confirm-rename-animation').addEventListener('click', () => this.handleConfirmRenameAnimation());
     
@@ -1766,25 +1763,35 @@ export class UIManager {
    */
   handleSaveCameraView() {
     // Open the save preset modal
-    document.getElementById('save-camera-preset-modal').classList.add('is-active');
+    const modal = document.getElementById('save-camera-preset-modal');
     const nameInput = document.getElementById('camera-preset-name-input');
+    
+    modal.classList.add('is-active');
     nameInput.value = '';
+    
+    // Remove existing keydown listener if any
+    if (nameInput._cameraPresetKeydownHandler) {
+      nameInput.removeEventListener('keydown', nameInput._cameraPresetKeydownHandler);
+      delete nameInput._cameraPresetKeydownHandler;
+    }
+    
+    // Add Enter key listener
+    const keydownHandler = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        document.getElementById('btn-confirm-save-camera-preset').click();
+      }
+    };
+    
+    nameInput._cameraPresetKeydownHandler = keydownHandler;
+    nameInput.addEventListener('keydown', keydownHandler);
     
     // Focus the input after a short delay to ensure modal is rendered
     setTimeout(() => {
       nameInput.focus();
-    }, 100);
-    
-    // Add Enter key listener to the input (remove old one first)
-    const newInput = nameInput.cloneNode(true);
-    nameInput.parentNode.replaceChild(newInput, nameInput);
-    
-    newInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        document.getElementById('btn-confirm-save-camera-preset').click();
-      }
-    });
+      nameInput.select(); // Select any existing text
+    }, 150);
   }
 
   /**
@@ -1830,9 +1837,12 @@ export class UIManager {
       return;
     }
 
-    const success = this.cameraPresetManager.loadPreset(presetName);
+    const preset = this.cameraPresetManager.loadPreset(presetName);
 
-    if (success) {
+    if (preset) {
+      // Apply the preset to the camera
+      this.sceneManager.applyCameraState(preset);
+      
       this.showNotification(`Loaded camera view "${presetName}"`, 'success', 2000);
       
       // Enable delete button

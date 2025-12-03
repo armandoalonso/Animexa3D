@@ -37,6 +37,7 @@ export class SceneControlsUIController {
     document.getElementById('btn-save-camera-view').addEventListener('click', () => this.handleSaveCameraView());
     document.getElementById('custom-camera-preset').addEventListener('change', (e) => this.handleLoadCustomPreset(e));
     document.getElementById('btn-delete-camera-preset').addEventListener('click', () => this.handleDeleteCameraPreset());
+    document.getElementById('btn-confirm-save-camera-preset').addEventListener('click', () => this.handleConfirmSaveCameraPreset());
     
     // Light controls
     document.getElementById('light-x').addEventListener('input', () => this.handleLightPosition());
@@ -107,19 +108,45 @@ export class SceneControlsUIController {
   handleSaveCameraView() {
     // Open modal for naming the preset
     const modal = document.getElementById('save-camera-preset-modal');
-    const input = document.getElementById('camera-preset-name');
+    const input = document.getElementById('camera-preset-name-input');
+    
+    if (!modal || !input) {
+      console.error('Save camera preset modal elements not found');
+      this.notificationService.showNotification('Unable to open save dialog', 'error');
+      return;
+    }
+    
     input.value = '';
     modal.classList.add('is-active');
+    
+    // Focus the input after a short delay
+    setTimeout(() => {
+      input.focus();
+    }, 150);
   }
 
   /**
    * Confirm and save camera preset
    */
   handleConfirmSaveCameraPreset() {
-    const name = document.getElementById('camera-preset-name').value.trim();
+    const nameInput = document.getElementById('camera-preset-name-input');
+    
+    if (!nameInput) {
+      console.error('Camera preset name input not found');
+      this.notificationService.showNotification('Unable to save preset', 'error');
+      return;
+    }
+    
+    const name = nameInput.value.trim();
     
     if (!name) {
       this.notificationService.showNotification('Please enter a preset name', 'warning');
+      return;
+    }
+    
+    // Check if preset already exists
+    if (this.cameraPresetManager.hasPreset(name)) {
+      this.notificationService.showNotification(`A preset named "${name}" already exists. Please use a different name.`, 'warning', 4000);
       return;
     }
     
@@ -164,7 +191,7 @@ export class SceneControlsUIController {
     // Enable delete button
     document.getElementById('btn-delete-camera-preset').disabled = false;
     
-    this.notificationService.showNotification(`Loaded preset "${presetName}"`, 'success');
+    this.notificationService.showNotification(`Loaded preset "${presetName}"`, 'success', 2000);
   }
 
   /**

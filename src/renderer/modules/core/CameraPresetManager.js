@@ -37,9 +37,10 @@ export class CameraPresetManager {
   /**
    * Save current camera view as a new preset
    * @param {string} name - Name for the preset
+   * @param {Object} state - Optional camera state (if not provided, uses current camera state)
    * @returns {boolean} Success status
    */
-  saveCurrentView(name) {
+  savePreset(name, state = null) {
     if (!name || name.trim() === '') {
       return false;
     }
@@ -50,14 +51,14 @@ export class CameraPresetManager {
     // Note: Overwrite confirmation should be handled by the UI layer
     const alreadyExists = this.presets[trimmedName];
 
-    // Get current camera state
-    const state = this.getCurrentCameraState();
+    // Get camera state (use provided state or get current state)
+    const cameraState = state || this.getCurrentCameraState();
 
     // Save preset
     this.presets[trimmedName] = {
       name: trimmedName,
-      position: state.position,
-      target: state.target,
+      position: cameraState.position,
+      target: cameraState.target,
       createdAt: new Date().toISOString(),
       overwritten: alreadyExists
     };
@@ -69,11 +70,38 @@ export class CameraPresetManager {
   }
 
   /**
-   * Load a preset and apply it to the camera
-   * @param {string} name - Name of the preset to load
+   * Save current camera view as a new preset (alias for backward compatibility)
+   * @param {string} name - Name for the preset
    * @returns {boolean} Success status
    */
+  saveCurrentView(name) {
+    return this.savePreset(name);
+  }
+
+  /**
+   * Load a preset and return the preset data
+   * @param {string} name - Name of the preset to load
+   * @returns {Object|null} Preset object or null if not found
+   */
   loadPreset(name) {
+    const preset = this.presets[name];
+
+    if (!preset) {
+      return null;
+    }
+
+    return {
+      position: preset.position,
+      target: preset.target
+    };
+  }
+
+  /**
+   * Apply a preset to the camera
+   * @param {string} name - Name of the preset to apply
+   * @returns {boolean} Success status
+   */
+  applyPreset(name) {
     const preset = this.presets[name];
 
     if (!preset) {

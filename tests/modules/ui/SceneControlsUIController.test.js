@@ -28,7 +28,7 @@ describe('SceneControlsUIController', () => {
       'custom-camera-preset': createMockElement('select'),
       'btn-delete-camera-preset': createMockElement('button'),
       'save-camera-preset-modal': createMockElement('div'),
-      'camera-preset-name': createMockElement('input'),
+      'camera-preset-name-input': createMockElement('input'),
       'btn-confirm-save-camera-preset': createMockElement('button')
     };
 
@@ -52,7 +52,8 @@ describe('SceneControlsUIController', () => {
       loadPreset: vi.fn(() => ({ position: [0, 0, 5], target: [0, 0, 0] })),
       deletePreset: vi.fn(),
       getAllPresets: vi.fn(() => ({})),
-      getPresetNames: vi.fn(() => [])
+      getPresetNames: vi.fn(() => []),
+      hasPreset: vi.fn(() => false)
     };
 
     mockNotificationService = {
@@ -217,13 +218,41 @@ describe('SceneControlsUIController', () => {
         controller.handleSaveCameraView();
 
         expect(elements['save-camera-preset-modal'].classList.add).toHaveBeenCalledWith('is-active');
-        expect(elements['camera-preset-name'].value).toBe('');
+        expect(elements['camera-preset-name-input'].value).toBe('');
+      });
+
+      it('should handle missing modal element gracefully', () => {
+        global.document.getElementById = vi.fn((id) => {
+          if (id === 'save-camera-preset-modal') return null;
+          return elements[id] || null;
+        });
+
+        controller.handleSaveCameraView();
+
+        expect(mockNotificationService.showNotification).toHaveBeenCalledWith(
+          'Unable to open save dialog',
+          'error'
+        );
+      });
+
+      it('should handle missing input element gracefully', () => {
+        global.document.getElementById = vi.fn((id) => {
+          if (id === 'camera-preset-name-input') return null;
+          return elements[id] || null;
+        });
+
+        controller.handleSaveCameraView();
+
+        expect(mockNotificationService.showNotification).toHaveBeenCalledWith(
+          'Unable to open save dialog',
+          'error'
+        );
       });
     });
 
     describe('handleConfirmSaveCameraPreset', () => {
       it('should save camera preset with valid name', () => {
-        elements['camera-preset-name'].value = 'My View';
+        elements['camera-preset-name-input'].value = 'My View';
 
         controller.handleConfirmSaveCameraPreset();
 
@@ -240,7 +269,7 @@ describe('SceneControlsUIController', () => {
       });
 
       it('should show warning if name is empty', () => {
-        elements['camera-preset-name'].value = '';
+        elements['camera-preset-name-input'].value = '';
 
         controller.handleConfirmSaveCameraPreset();
 
@@ -252,7 +281,7 @@ describe('SceneControlsUIController', () => {
       });
 
       it('should show error if camera state unavailable', () => {
-        elements['camera-preset-name'].value = 'My View';
+        elements['camera-preset-name-input'].value = 'My View';
         mockSceneManager.getCurrentCameraState.mockReturnValue(null);
 
         controller.handleConfirmSaveCameraPreset();
@@ -264,13 +293,28 @@ describe('SceneControlsUIController', () => {
       });
 
       it('should trim whitespace from name', () => {
-        elements['camera-preset-name'].value = '  My View  ';
+        elements['camera-preset-name-input'].value = '  My View  ';
 
         controller.handleConfirmSaveCameraPreset();
 
         expect(mockCameraPresetManager.savePreset).toHaveBeenCalledWith(
           'My View',
           expect.any(Object)
+        );
+      });
+
+      it('should handle missing input element gracefully', () => {
+        global.document.getElementById = vi.fn((id) => {
+          if (id === 'camera-preset-name-input') return null;
+          return elements[id] || null;
+        });
+
+        controller.handleConfirmSaveCameraPreset();
+
+        expect(mockCameraPresetManager.savePreset).not.toHaveBeenCalled();
+        expect(mockNotificationService.showNotification).toHaveBeenCalledWith(
+          'Unable to save preset',
+          'error'
         );
       });
     });
@@ -287,7 +331,8 @@ describe('SceneControlsUIController', () => {
         );
         expect(mockNotificationService.showNotification).toHaveBeenCalledWith(
           'Loaded preset "My View"',
-          'success'
+          'success',
+          2000
         );
         expect(elements['btn-delete-camera-preset'].disabled).toBe(false);
       });

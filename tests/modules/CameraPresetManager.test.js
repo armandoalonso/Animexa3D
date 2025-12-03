@@ -205,6 +205,41 @@ describe('CameraPresetManager', () => {
     });
   });
 
+  describe('savePreset()', () => {
+    it('should save a preset with provided state', () => {
+      const state = {
+        position: { x: 15, y: 25, z: 35 },
+        target: { x: 1, y: 2, z: 3 }
+      };
+
+      const result = presetManager.savePreset('Custom State', state);
+
+      expect(result).toBe(true);
+      expect(presetManager.hasPreset('Custom State')).toBe(true);
+      
+      const preset = presetManager.getAllPresets()['Custom State'];
+      expect(preset.position).toEqual(state.position);
+      expect(preset.target).toEqual(state.target);
+    });
+
+    it('should use current camera state when state not provided', () => {
+      mockSceneManager.camera.position.x = 5;
+      mockSceneManager.camera.position.y = 10;
+      mockSceneManager.camera.position.z = 15;
+      mockSceneManager.controls.target.x = 1;
+      mockSceneManager.controls.target.y = 2;
+      mockSceneManager.controls.target.z = 3;
+
+      const result = presetManager.savePreset('Current State');
+
+      expect(result).toBe(true);
+      const preset = presetManager.getAllPresets()['Current State'];
+      expect(preset.position.x).toBe(5);
+      expect(preset.position.y).toBe(10);
+      expect(preset.position.z).toBe(15);
+    });
+  });
+
   describe('loadPreset()', () => {
     beforeEach(() => {
       // Save a test preset - Update values using set() or direct property assignment
@@ -225,8 +260,58 @@ describe('CameraPresetManager', () => {
       mockSceneManager.controls.target.z = 0;
     });
 
-    it('should load and apply a preset', () => {
-      const result = presetManager.loadPreset('Test Preset');
+    it('should load and return a preset object', () => {
+      const preset = presetManager.loadPreset('Test Preset');
+
+      expect(preset).toBeDefined();
+      expect(preset.position.x).toBe(10);
+      expect(preset.position.y).toBe(20);
+      expect(preset.position.z).toBe(30);
+      expect(preset.target.x).toBe(5);
+      expect(preset.target.y).toBe(10);
+      expect(preset.target.z).toBe(15);
+    });
+
+    it('should return null for non-existent preset', () => {
+      const result = presetManager.loadPreset('Non Existent');
+
+      expect(result).toBeNull();
+    });
+
+    it('should not modify camera when loading preset', () => {
+      mockSceneManager.camera.position.x = 99;
+      mockSceneManager.camera.position.y = 99;
+      mockSceneManager.camera.position.z = 99;
+      
+      presetManager.loadPreset('Test Preset');
+
+      // Camera should remain unchanged since loadPreset only returns data
+      expect(mockSceneManager.camera.position.x).toBe(99);
+    });
+  });
+
+  describe('applyPreset()', () => {
+    beforeEach(() => {
+      // Save a test preset
+      mockSceneManager.camera.position.x = 10;
+      mockSceneManager.camera.position.y = 20;
+      mockSceneManager.camera.position.z = 30;
+      mockSceneManager.controls.target.x = 5;
+      mockSceneManager.controls.target.y = 10;
+      mockSceneManager.controls.target.z = 15;
+      presetManager.saveCurrentView('Test Preset');
+
+      // Reset camera to different position
+      mockSceneManager.camera.position.x = 0;
+      mockSceneManager.camera.position.y = 0;
+      mockSceneManager.camera.position.z = 0;
+      mockSceneManager.controls.target.x = 0;
+      mockSceneManager.controls.target.y = 0;
+      mockSceneManager.controls.target.z = 0;
+    });
+
+    it('should apply a preset to camera', () => {
+      const result = presetManager.applyPreset('Test Preset');
 
       expect(result).toBe(true);
       expect(mockSceneManager.camera.position.x).toBe(10);
@@ -237,14 +322,14 @@ describe('CameraPresetManager', () => {
       expect(mockSceneManager.controls.target.z).toBe(15);
     });
 
-    it('should update controls after loading', () => {
-      presetManager.loadPreset('Test Preset');
+    it('should update controls after applying', () => {
+      presetManager.applyPreset('Test Preset');
 
       expect(mockSceneManager.controls.update).toHaveBeenCalled();
     });
 
     it('should return false for non-existent preset', () => {
-      const result = presetManager.loadPreset('Non Existent');
+      const result = presetManager.applyPreset('Non Existent');
 
       expect(result).toBe(false);
     });
@@ -254,7 +339,7 @@ describe('CameraPresetManager', () => {
       mockSceneManager.camera.position.y = 99;
       mockSceneManager.camera.position.z = 99;
       
-      presetManager.loadPreset('Non Existent');
+      presetManager.applyPreset('Non Existent');
 
       expect(mockSceneManager.camera.position.x).toBe(99);
     });
@@ -482,8 +567,8 @@ describe('CameraPresetManager', () => {
       expect(presetManager.getPresetNames()).toHaveLength(2);
 
       // Load one
-      presetManager.loadPreset('View 1');
-      expect(mockSceneManager.camera.position.x).toBe(1);
+      const preset = presetManager.loadPreset('View 1');
+      expect(preset.position.x).toBe(1);
 
       // Delete one
       presetManager.deletePreset('View 2');
@@ -516,7 +601,7 @@ describe('CameraPresetManager', () => {
       presetManager.saveCurrentView('Other View');
 
       // Load original preset
-      presetManager.loadPreset('Stable View');
+      presetManager.applyPreset('Stable View');
 
       // Verify original values unchanged
       expect(mockSceneManager.camera.position.x).toBe(10);
